@@ -1,0 +1,364 @@
+package com.g2rain.gateway.filters;
+
+
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.g2rain.common.exception.BusinessException;
+import com.g2rain.common.exception.SystemErrorCode;
+import com.g2rain.common.json.JsonCodec;
+import com.g2rain.common.json.JsonCodecBuilder;
+import com.g2rain.common.json.RawNumberDeserializer;
+import com.g2rain.common.utils.Collections;
+import com.g2rain.common.utils.Constants;
+import com.g2rain.common.utils.Strings;
+import com.g2rain.gateway.codec.RFC3986Encoder;
+import com.g2rain.gateway.enums.HashAlgorithm;
+import com.g2rain.gateway.exception.GatewayErrorCode;
+import com.g2rain.gateway.model.context.EdgePrincipalContextHolder;
+import com.g2rain.gateway.model.web.CachedBodyRequest;
+import com.g2rain.gateway.utils.ReqParamCodec;
+import com.g2rain.gateway.whitelist.WhiteListResolver;
+import lombok.AllArgsConstructor;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.core.Ordered;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.stereotype.Component;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+/**
+ * 签名验证过滤器。
+ * <p>
+ * 本过滤器用于在 Spring Cloud Gateway 中对请求进行签名验证，
+ * 主要功能包括：
+ * </p>
+ * <ul>
+ *     <li>跳过 SSE 和 WebSocket 请求</li>
+ *     <li>根据请求方法判断是否需要对请求 body 进行哈希验证</li>
+ *     <li>对 query 参数和请求 body 进行规范化并生成哈希</li>
+ *     <li>对比计算的哈希值和预期的签名，验证请求合法性</li>
+ * </ul>
+ *
+ * <h2>支持的内容类型</h2>
+ * <ul>
+ *     <li>{@code application/json}</li>
+ *     <li>{@code multipart/form-data}</li>
+ *     <li>{@code application/x-www-form-urlencoded}</li>
+ *     <li>其他类型直接按字节哈希处理</li>
+ * </ul>
+ *
+ * <h2>签名规则</h2>
+ * <pre>
+ * finalHash = sha256(normalizeParams(queryParams) + "\n" + normalizeBody(body), algorithm)
+ * </pre>
+ *
+ * <h2>使用示例</h2>
+ * <pre>{@code
+ * @Bean
+ * public SignVerificationFilter signVerificationFilter() {
+ *     return new SignVerificationFilter();
+ * }
+ * }</pre>
+ *
+ * <h2>注意事项</h2>
+ * <ul>
+ *     <li>需要确保 {@link EdgePrincipalContextHolder} 中包含签名信息</li>
+ *     <li>跳过 GET、DELETE、HEAD、OPTIONS、TRACE 方法的 body 验证</li>
+ *     <li>对不支持的哈希算法直接报错</li>
+ * </ul>
+ *
+ * @author alpha
+ * @since 2025/10/6
+ */
+@Component
+@AllArgsConstructor
+public class SignVerificationFilter1 implements GlobalFilter, Ordered {
+
+    /**
+     * {@code whiteListResolver} 用于判断当前请求是否命中白名单规则，
+     * 如果命中则可以跳过当前 Filter 的执行。
+     * <p>
+     * 白名单规则包括全局规则和针对特定 Filter 的规则，匹配顺序为：
+     * Filter 白名单 → 全局白名单，
+     * 匹配方式包括 contextPath、exactPath、patternPath。
+     * </p>
+     */
+    private final WhiteListResolver whiteListResolver;
+
+    /**
+     * 十六进制格式工具
+     */
+    private static final HexFormat HEX_FORMAT = HexFormat.of();
+
+    /**
+     * 不需要 body 哈希的请求方法集合
+     */
+    private final Set<HttpMethod> skipBodyHashMethods = Set.of(
+        HttpMethod.GET, HttpMethod.DELETE, HttpMethod.HEAD, HttpMethod.OPTIONS, HttpMethod.TRACE
+    );
+
+    /**
+     * JSON 编解码器
+     */
+    private static final JsonCodec jsonCodec = JsonCodecBuilder.builder().withConfig(mapper -> {
+        SimpleModule module = new SimpleModule();
+        module.addDeserializer(JsonNode.class, new RawNumberDeserializer());
+        mapper.registerModule(module);
+        mapper.configure(SerializationFeature.INDENT_OUTPUT, false);
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    }).build();
+
+    /**
+     * 网关过滤器方法，验证请求签名。
+     *
+     * @param exchange 当前请求的 {@link ServerWebExchange}
+     * @param chain    网关过滤器链
+     * @return {@link Mono} 完成信号
+     */
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        // 当前请求对象
+        ServerHttpRequest request = exchange.getRequest();
+
+        // 检查当前请求是否命中白名单规则
+        // 如果命中白名单，则跳过当前 Filter 的处理，直接进入下一个 Filter
+        String filterName = this.getClass().getSimpleName();
+        if (whiteListResolver.shouldExclude(filterName, request)) {
+            return chain.filter(exchange);
+        }
+
+        // 获取当前上下文的签名信息
+        return EdgePrincipalContextHolder.get().flatMap(principalContext -> {
+            String algorithm = principalContext.getHashAlgorithm();
+            // hash算法错误
+            if (HashAlgorithm.isNotExist(algorithm)) {
+                return Mono.error(new BusinessException(
+                    GatewayErrorCode.NO_SUPPORTED_ALGORITHM,
+                    algorithm
+                ));
+            }
+
+            String expectedHash = principalContext.getParamHashStr();
+            // 没有参数摘要直接报错
+            if (Strings.isBlank(expectedHash)) {
+                return Mono.error(new BusinessException(
+                    SystemErrorCode.PARAM_REQUIRED,
+                    "paramHashStr"
+                ));
+            }
+
+            // 获取 query 参数
+            MultiValueMap<String, String> params = request.getQueryParams();
+
+            // 对 query 参数哈希化
+            String paramHash = normalizeParams(params, algorithm);
+
+            // 获取请求方法
+            HttpMethod method = request.getMethod();
+
+            // 获取 Content-Type
+            MediaType type = request.getHeaders().getContentType();
+
+            // 无需 body hash
+            if (skipBodyHashMethods.contains(method) || Objects.isNull(type) || !(request instanceof CachedBodyRequest cached)) {
+                return doFilter(exchange, chain, expectedHash, paramHash);
+            }
+
+            // 否则，处理 body 哈希
+            return normalizeBody(type, exchange, cached, algorithm).flatMap(bodyHash -> {
+                // 拼接 query + body 进行哈希
+                String finalHash = sha256(paramHash + "\n" + bodyHash, algorithm);
+                return doFilter(exchange, chain, expectedHash, finalHash);
+            });
+        });
+    }
+
+    /**
+     * 执行签名校验过滤逻辑。
+     *
+     * <p>该方法用于比较请求中携带的签名（paramHash）与系统期望的签名（expectedHash），
+     * 若两者不一致，则抛出业务异常；若一致，则继续执行后续过滤链。</p>
+     *
+     * @param exchange     当前请求上下文 {@link ServerWebExchange}
+     * @param chain        网关过滤器链 {@link GatewayFilterChain}
+     * @param expectedHash 系统计算出的期望签名
+     * @param paramHash    请求参数中携带的签名
+     * @return 如果签名一致，则返回 {@code chain.filter(exchange)}；
+     * 否则返回 {@code Mono.error(...)} 抛出签名无效异常
+     */
+    private Mono<Void> doFilter(ServerWebExchange exchange, GatewayFilterChain chain, String expectedHash, String paramHash) {
+        // 签名不一致则拒绝
+        if (!expectedHash.equals(paramHash)) {
+            return Mono.error(new BusinessException(GatewayErrorCode.PARAM_INVALID, expectedHash));
+        }
+
+        // 签名正确，继续执行
+        return chain.filter(exchange);
+    }
+
+    /**
+     * 对请求 Body 进行规范化哈希。
+     *
+     * @param type      请求 Content-Type
+     * @param exchange  当前请求上下文
+     * @param cached    缓存请求体
+     * @param algorithm 哈希算法
+     * @return {@link Mono} 包含规范化后的 Body 哈希
+     */
+    private Mono<String> normalizeBody(MediaType type, ServerWebExchange exchange, CachedBodyRequest cached, String algorithm) {
+        if (MediaType.APPLICATION_JSON.isCompatibleWith(type)) {
+            return normalizeJsonBody(cached, algorithm);
+        }
+
+        if (MediaType.MULTIPART_FORM_DATA.isCompatibleWith(type)) {
+            return normalizeFormDataBody(exchange, algorithm);
+        }
+
+        if (MediaType.APPLICATION_FORM_URLENCODED.isCompatibleWith(type)) {
+            return normalizeFormUrlEncodedBody(cached, algorithm);
+        }
+
+        byte[] bytes = cached.asBytes().length > 0 ? cached.asBytes() : Constants.EMPTY_BYTE;
+        return Mono.just(sha256(bytes, algorithm));
+    }
+
+    /**
+     * 对 JSON Body 进行规范化哈希。
+     *
+     * @param cachedRequest 缓存请求体
+     * @param algorithm     哈希算法
+     * @return {@link Mono} JSON Body 哈希
+     */
+    private Mono<String> normalizeJsonBody(CachedBodyRequest cachedRequest, String algorithm) {
+        return Mono.just(sha256(jsonCodec.sort(cachedRequest.asBytes()), algorithm));
+    }
+
+    /**
+     * 对 multipart/form-data Body 进行规范化哈希。
+     *
+     * @param exchange  当前请求上下文
+     * @param algorithm 哈希算法
+     * @return {@link Mono} multipart Body 哈希
+     */
+    private Mono<String> normalizeFormDataBody(ServerWebExchange exchange, String algorithm) {
+        return exchange.getMultipartData()
+            .flatMap(multipartData -> ReqParamCodec.processMultipartBody(
+                multipartData, filePart -> calcFileHash(filePart, algorithm)
+            ))
+            .map(body -> normalizeParams(body, algorithm));
+    }
+
+    /**
+     * 对 application/x-www-form-urlencoded Body 进行规范化哈希。
+     *
+     * @param cachedRequest 缓存请求体
+     * @param algorithm     哈希算法
+     * @return {@link Mono} form Body 哈希
+     */
+    private Mono<String> normalizeFormUrlEncodedBody(CachedBodyRequest cachedRequest, String algorithm) {
+        return Mono.just(normalizeParams(ReqParamCodec.processFormUrlEncodedBody(cachedRequest), algorithm));
+    }
+
+    /**
+     * 对 query 参数进行规范化并生成哈希。
+     *
+     * @param params    query 参数
+     * @param algorithm 哈希算法
+     * @return 参数哈希值
+     */
+    private String normalizeParams(MultiValueMap<String, String> params, String algorithm) {
+        if (Collections.isEmpty(params)) {
+            return sha256(Constants.EMPTY_BYTE, algorithm);
+        }
+
+        return sha256(params.entrySet().stream()
+            .flatMap(entry -> {
+                String key = RFC3986Encoder.encode(entry.getKey());
+                List<String> values = entry.getValue();
+                if (Collections.isEmpty(values)) {
+                    return Stream.of(key + "=");
+                }
+
+                return values.stream()
+                    .map(RFC3986Encoder::encode)
+                    .sorted()
+                    .map(val -> key + "=" + val);
+            })
+            .sorted()
+            .collect(Collectors.joining("&")), algorithm);
+    }
+
+    /**
+     * 计算文件的哈希值。
+     *
+     * @param filePart  文件部分
+     * @param algorithm 哈希算法
+     * @return {@link Mono} 文件哈希值
+     */
+    private Mono<String> calcFileHash(FilePart filePart, String algorithm) {
+        return DataBufferUtils.join(filePart.content()).map(dataBuffer -> {
+            try {
+                byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                dataBuffer.read(bytes);
+                return filePart.filename() + "#" + sha256(bytes, algorithm);
+            } finally {
+                DataBufferUtils.release(dataBuffer);
+            }
+        });
+    }
+
+    /**
+     * 对字符串进行哈希。
+     *
+     * @param input     待哈希字符串
+     * @param algorithm 哈希算法
+     * @return 哈希结果
+     */
+    private String sha256(String input, String algorithm) {
+        return sha256(input.getBytes(StandardCharsets.UTF_8), algorithm);
+    }
+
+    /**
+     * 对字节数组进行哈希。
+     *
+     * @param data      待哈希字节数组
+     * @param algorithm 哈希算法
+     * @return 哈希结果
+     */
+    private String sha256(byte[] data, String algorithm) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance(algorithm);
+            byte[] hash = digest.digest(Objects.nonNull(data) ? data : Constants.EMPTY_BYTE);
+            return HEX_FORMAT.formatHex(hash);
+        } catch (Exception e) {
+            throw new BusinessException(SystemErrorCode.PARAM_REQUIRED, "hashAlgorithm");
+        }
+    }
+
+    /**
+     * 获取过滤器执行顺序。
+     *
+     * @return 过滤器顺序值
+     */
+    @Override
+    public int getOrder() {
+        return Ordered.HIGHEST_PRECEDENCE + 240;
+    }
+}
