@@ -6,15 +6,16 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 @DisplayName("路由定义实体测试")
 public class RouteDefinitionVoTest {
 
-    private RouteDefinitionVo RouteDefinitionVo;
+    private RouteDefinitionVo vo;
 
     @BeforeEach
     void setUp() {
-        RouteDefinitionVo = new RouteDefinitionVo();
+        vo = new RouteDefinitionVo();
     }
 
     @Test
@@ -28,71 +29,58 @@ public class RouteDefinitionVoTest {
     @DisplayName("测试ID的getter和setter")
     void testIdGetterAndSetter() {
         Long id = 1L;
-        RouteDefinitionVo.setId(id);
-        assertEquals(id, RouteDefinitionVo.getId());
+        vo.setId(id);
+        assertEquals(id, vo.getId());
     }
 
     @Test
     @DisplayName("测试Name的getter和setter")
     void testNameGetterAndSetter() {
         String name = "test-route";
-        RouteDefinitionVo.setName(name);
-        assertEquals(name, RouteDefinitionVo.getName());
+        vo.setName(name);
+        assertEquals(name, vo.getName());
     }
 
     @Test
-    @DisplayName("测试EndpointHost的getter和setter")
-    void testEndpointHostGetterAndSetter() {
-        String endpointHost = "http://test-service";
-        RouteDefinitionVo.setEndpointHost(endpointHost);
-        assertEquals(endpointHost, RouteDefinitionVo.getEndpointHost());
+    @DisplayName("测试Endpoint的getter和setter")
+    void testEndpointGetterAndSetter() {
+        String endpoint = "http://test-service";
+        vo.setEndpoint(endpoint);
+        assertEquals(endpoint, vo.getEndpoint());
     }
 
     @Test
-    @DisplayName("测试EndpointPath的getter和setter")
-    void testEndpointPathGetterAndSetter() {
-        String endpointPath = "/api/v1/test";
-        RouteDefinitionVo.setEndpointPath(endpointPath);
-        assertEquals(endpointPath, RouteDefinitionVo.getEndpointPath());
-    }
-
-    @Test
-    @DisplayName("测试Context的getter和setter")
-    void testContextGetterAndSetter() {
-        String context = "{\"key\":\"value\"}";
-        RouteDefinitionVo.setContext(context);
-        assertEquals(context, RouteDefinitionVo.getContext());
+    @DisplayName("测试RoutePrefix的getter和setter")
+    void testRoutePrefixGetterAndSetter() {
+        String prefix = "api";
+        vo.setRoutePrefix(prefix);
+        assertEquals(prefix, vo.getRoutePrefix());
     }
 
     @Test
     @DisplayName("测试Path的getter和setter")
     void testPathGetterAndSetter() {
         String path = "/test/**";
-        RouteDefinitionVo.setPath(path);
-        assertEquals(path, RouteDefinitionVo.getPath());
+        vo.setPath(path);
+        assertEquals(path, vo.getPath());
     }
 
     @Test
     @DisplayName("测试Method的getter和setter")
     void testMethodGetterAndSetter() {
         String method = "GET";
-        RouteDefinitionVo.setMethod(method);
-        assertEquals(method, RouteDefinitionVo.getMethod());
+        vo.setMethod(method);
+        assertEquals(method, vo.getMethod());
     }
 
     @Test
-    @DisplayName("测试HeaderParameters的getter和setter")
-    void testHeaderParametersGetterAndSetter() {
-        String headerParameters = "Authorization=Bearer token";
-        RouteDefinitionVo.setHeaderParameters(headerParameters);
-        assertEquals(headerParameters, RouteDefinitionVo.getHeaderParameters());
-    }
-
-    @Test
-    @DisplayName("测试ContentType的getter和setter")
-    void testContentTypeGetterAndSetter() {
-        String contentType = "application/json";
-        RouteDefinitionVo.setContentType(contentType);
-        assertEquals(contentType, RouteDefinitionVo.getContentType());
+    @DisplayName("未赋值字段为null")
+    void testDefaults() {
+        assertNull(vo.getId());
+        assertNull(vo.getEndpoint());
+        assertNull(vo.getRoutePrefix());
+        assertNull(vo.getPath());
+        assertNull(vo.getMethod());
+        assertNull(vo.getName());
     }
 }

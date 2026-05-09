@@ -1,24 +1,23 @@
-package com.g2rain.gateway.model.cache;
+package com.g2rain.gateway.model.route;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import io.swagger.v3.oas.annotations.media.Schema;
+import com.g2rain.common.json.AdminCompanyCondition;
+import com.g2rain.common.json.ConditionalJsonIgnore;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-
 /**
- * 国际化信息表返回VO
- * 关联表名: i18n_message
+ * 服务注册表返回VO
+ * 关联表名: service_registry
  * 功能：封装接口返回数据，继承BaseVo复用基础字段逻辑，隔离数据库实体与前端展示层
  *
- * @author Aplha
+ * @author G2rain Generator
  */
 @Setter
 @Getter
 @NoArgsConstructor
-public class I18nMessageVo {
-
+public class ServiceRegistryVo {
     /**
      * 主键
      */
@@ -37,33 +36,33 @@ public class I18nMessageVo {
     private String createTime;
 
     /**
-     * 国际化用途编码
+     * 服务逻辑编码
      */
-    @Schema(description = "国际化用途编码")
-    private String messageUsageCode;
+    private String serviceCode;
 
     /**
-     * 语言编码,如 zh
+     * 服务显示名称
      */
-    private String languageCode;
+    private String name;
 
     /**
-     * 国家/地区编码,如 CN
+     * 服务目标地址
      */
-    private String regionCode;
+    private String endpoint;
 
     /**
-     * 国际化消息编码(唯一)
+     * 网关路由前缀
      */
-    private String messageCode;
+    private String routePrefix;
 
     /**
-     * 国际化内容文本
+     * 后端服务说明
      */
-    private String messageText;
+    private String description;
 
     /**
-     * 扩展字段,存储额外格式化内容
+     * 删除标识[0:未删除, 1:已删除]
      */
-    private String extendField;
+    @ConditionalJsonIgnore(adminCompany = AdminCompanyCondition.TRUE)
+    private Boolean deleteFlag;
 }

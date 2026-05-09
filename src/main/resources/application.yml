@@ -3,6 +3,8 @@ server:
   port: ${SERVER_PORT:8083}
 
 spring:
+  main:
+    allow-bean-definition-overriding: true
   reactor:
     context-propagation: auto
   application:

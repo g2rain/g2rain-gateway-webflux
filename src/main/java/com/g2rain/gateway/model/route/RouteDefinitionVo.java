@@ -1,9 +1,5 @@
 package com.g2rain.gateway.model.route;
 
-import com.g2rain.common.json.AdminCompanyCondition;
-import com.g2rain.common.json.ConditionalJsonIgnore;
-import com.g2rain.common.model.BaseVo;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -18,57 +14,34 @@ import lombok.Setter;
 @Setter
 @Getter
 @NoArgsConstructor
-@EqualsAndHashCode(callSuper = true)
-public class RouteDefinitionVo extends BaseVo {
+public class RouteDefinitionVo {
+    /**
+     * 资源接口标识
+     */
+    private Long id;
 
     /**
-     * 路由名称
+     * 服务目标地址
+     */
+    private String endpoint;
+
+    /**
+     * 网关路由前缀
+     */
+    private String routePrefix;
+
+    /**
+     * 资源接口名称
      */
     private String name;
 
     /**
-     * 终端主机
-     */
-    private String endpointHost;
-
-    /**
-     * 终端路径
-     */
-    private String endpointPath;
-
-    /**
-     * 转发路径
-     */
-    private String context;
-
-    /**
-     * 请求路径
-     */
-    private String path;
-
-    /**
-     * 请求方法
+     * 接口请求方法
      */
     private String method;
 
     /**
-     * 请求头参
+     * 接口请求路径
      */
-    private String headerParameters;
-
-    /**
-     * 内容类型
-     */
-    private String contentType;
-
-    /**
-     * 业务说明
-     */
-    private String description;
-
-    /**
-     * 删除标识[0:未删除, 1:已删除]
-     */
-    @ConditionalJsonIgnore(adminCompany = AdminCompanyCondition.TRUE)
-    private Boolean deleteFlag;
+    private String path;
 }

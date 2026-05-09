@@ -4,6 +4,7 @@ package com.g2rain.gateway.cache;
 import com.g2rain.common.syncer.AbstractMessageStorage;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.gateway.client.BasisServiceClient;
+import com.g2rain.gateway.enums.SyncerEnum;
 import com.g2rain.gateway.model.cache.OrganIdName;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -11,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -18,8 +20,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import reactor.core.publisher.Mono;
+import java.util.stream.Collectors;
 
 /**
  * @author alpha
@@ -34,6 +37,11 @@ public class OrganName extends AbstractMessageStorage<Long, OrganIdName, String>
      * 机构客户端
      */
     private final BasisServiceClient basisServiceClient;
+
+    /**
+     * 相同「未命中 id 集合」并发回源时合并为单次 Basis 批量 RPC（键为排序后的 id 列表字符串）。
+     */
+    private final ConcurrentHashMap<String, Mono<Map<String, String>>> inFlightLoads = new ConcurrentHashMap<>();
 
     /**
      * 机构名称本地缓存（网关侧）。
@@ -66,7 +74,7 @@ public class OrganName extends AbstractMessageStorage<Long, OrganIdName, String>
 
     @Override
     public @NonNull String dataSource() {
-        return "ORGAN_NAME";
+        return SyncerEnum.ORGAN_NAME.name();
     }
 
     @Override
@@ -130,33 +138,52 @@ public class OrganName extends AbstractMessageStorage<Long, OrganIdName, String>
             return Mono.just(result);
         }
 
-        // 2) 对未命中部分走批量接口
-        return basisServiceClient.organIdNameMap(missIds)
-            .doOnError(e -> log.warn("批量查询机构名称失败, ids={}", missIds, e))
+        Set<Long> frozenMiss = Set.copyOf(missIds);
+        String batchKey = missBatchKey(frozenMiss);
+        Mono<Map<String, String>> shared = inFlightLoads.computeIfAbsent(batchKey, k -> loadMissBatch(frozenMiss, k));
+
+        return shared.map(namesForMiss -> {
+            Map<String, String> merged = new HashMap<>(result);
+            merged.putAll(namesForMiss);
+            return merged;
+        });
+    }
+
+    private Mono<Map<String, String>> loadMissBatch(Set<Long> frozenMiss, String batchKey) {
+        return basisServiceClient.organIdNameMap(frozenMiss)
+            .doOnError(e -> log.warn("批量查询机构名称失败, ids={}", frozenMiss, e))
             .onErrorResume(_ -> Mono.just(List.of()))
-            .map(data -> {
-                if (!Collections.isEmpty(data)) {
-                    // 先把接口返回的命中项写回缓存，并从 missIds 移除
-                    for (OrganIdName vo : data) {
-                        if (Objects.isNull(vo) || Objects.isNull(vo.getOrganId())) {
-                            continue;
-                        }
+            .map(data -> materializeMissBatch(frozenMiss, data))
+            .cache()
+            .doFinally(_ -> inFlightLoads.remove(batchKey));
+    }
 
-                        Long id = vo.getOrganId();
-                        String name = Objects.toString(vo.getOrganName(), "");
-                        organCache.put(id, name);
-                        result.put(String.valueOf(id), name);
-                        missIds.remove(id);
-                    }
+    private static Map<String, String> materializeMissBatch(Set<Long> frozenMiss, List<OrganIdName> data) {
+        Set<Long> stillMissing = new HashSet<>(frozenMiss);
+        Map<String, String> namesForMiss = new HashMap<>(Math.max(16, frozenMiss.size()));
+        if (!Collections.isEmpty(data)) {
+            for (OrganIdName vo : data) {
+                if (Objects.isNull(vo) || Objects.isNull(vo.getOrganId())) {
+                    continue;
                 }
 
-                // 3) 回填缓存：接口没查到的也写入空串（负缓存），防止缓存穿透
-                for (Long id : missIds) {
-                    organCache.put(id, "");
-                    result.put(String.valueOf(id), "");
-                }
+                Long id = vo.getOrganId();
+                String name = Objects.toString(vo.getOrganName(), "");
+                organCache.put(id, name);
+                namesForMiss.put(String.valueOf(id), name);
+                stillMissing.remove(id);
+            }
+        }
 
-                return result;
-            });
+        for (Long id : stillMissing) {
+            organCache.put(id, "");
+            namesForMiss.put(String.valueOf(id), "");
+        }
+
+        return namesForMiss;
+    }
+
+    private static String missBatchKey(Set<Long> missIds) {
+        return missIds.stream().sorted().map(String::valueOf).collect(Collectors.joining(","));
     }
 }

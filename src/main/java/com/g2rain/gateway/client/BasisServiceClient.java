@@ -1,6 +1,9 @@
 package com.g2rain.gateway.client;
 
 
+import com.g2rain.gateway.model.route.BaseAuthorityApiVo;
+import com.g2rain.gateway.model.route.RouteDefinitionVo;
+import com.g2rain.gateway.model.route.ServiceRegistryVo;
 import com.g2rain.common.exception.ExceptionConverter;
 import com.g2rain.common.model.Result;
 import com.g2rain.gateway.model.cache.AppIdName;
@@ -8,6 +11,7 @@ import com.g2rain.gateway.model.cache.OrganIdName;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.Collections;
@@ -125,6 +129,85 @@ public class BasisServiceClient {
                 } else { // status != 200
                     // 统一抛出业务异常，带错误信息
                     return Mono.error(ExceptionConverter.of(result));
+                }
+            })
+            .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
+    }
+
+    /**
+     * 网关动态路由定义（与 WebMVC {@code RouteDefinitionClient}/{@code ResourceApiApi} 对齐）。
+     */
+    public Mono<List<RouteDefinitionVo>> selectRouteDefinitions() {
+        return webClient.get()
+            .uri("/resource_api/route_definitions")
+            .retrieve()
+            .bodyToMono(new ParameterizedTypeReference<Result<List<RouteDefinitionVo>>>() {
+            })
+            .flatMap(result -> result.isSuccess()
+                ? Mono.just(Objects.requireNonNullElse(result.getData(), Collections.<RouteDefinitionVo>emptyList()))
+                : Mono.error(ExceptionConverter.of(result)))
+            .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
+    }
+
+    /**
+     * 用户在指定应用下的接口权限列表。
+     */
+    public Mono<List<BaseAuthorityApiVo>> getApiPermissions(Long userId, Long applicationId) {
+        if (Objects.isNull(userId) || Objects.isNull(applicationId)) {
+            return Mono.just(Collections.emptyList());
+        }
+
+        return webClient.get()
+            .uri(uriBuilder -> uriBuilder.path("/authority/apis")
+                .queryParam("userId", userId)
+                .queryParam("applicationId", applicationId)
+                .build())
+            .retrieve()
+            .bodyToMono(new ParameterizedTypeReference<Result<List<BaseAuthorityApiVo>>>() {
+            })
+            .flatMap(result -> result.isSuccess()
+                ? Mono.just(Objects.requireNonNullElse(result.getData(), Collections.<BaseAuthorityApiVo>emptyList()))
+                : Mono.error(ExceptionConverter.of(result)))
+            .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
+    }
+
+    /**
+     * 账号（Passport）全局可访问的接口 ID 集合。
+     */
+    public Mono<List<Long>> getPassportApiPermissions() {
+        return webClient.get()
+            .uri("/authority/passport_api_permissions")
+            .retrieve()
+            .bodyToMono(new ParameterizedTypeReference<Result<List<Long>>>() {
+            })
+            .flatMap(result -> {
+                // status == 200
+                if (result.isSuccess()) {
+                    // 返回 TokenJWTPayload
+                    return Mono.just(result.getData());
+                } else { // status != 200
+                    // 统一抛出业务异常，带错误信息
+                    return Mono.error(ExceptionConverter.of(result));
+                }
+            })
+            .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
+    }
+
+    public Flux<ServiceRegistryVo> getServiceRegistry() {
+        return webClient.get()                          // 发起 GET 请求
+            .uri("/service_registry/list")              // 调用业务支撑服务的 /application/id_name_map 接口
+            .retrieve()                                 // 获取响应体
+            // 将 JSON 响应解析为 Result<List<ServiceRegistryVo>>
+            .bodyToMono(new ParameterizedTypeReference<Result<List<ServiceRegistryVo>>>() {
+            })
+            .flatMapMany(result -> {
+                // status == 200
+                if (result.isSuccess()) {
+                    // 返回 TokenJWTPayload
+                    return Flux.fromIterable(result.getData());
+                } else { // status != 200
+                    // 统一抛出业务异常，带错误信息
+                    return Flux.error(ExceptionConverter.of(result));
                 }
             })
             .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
