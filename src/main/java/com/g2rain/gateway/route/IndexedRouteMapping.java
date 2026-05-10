@@ -33,8 +33,10 @@ import java.util.concurrent.atomic.AtomicReference;
  *     <li>用 {@link #routesById} 中缓存的不可变快照取出完整 {@link Route}；</li>
  *     <li>对候选执行 {@link org.springframework.cloud.gateway.handler.AsyncPredicate#apply}（包装为 {@link Mono}），
  *         仅当谓词为真时认定命中；</li>
- *     <li>命中后写入 {@link ServerWebExchangeUtils#GATEWAY_PREDICATE_ROUTE_ATTR}，并调用父类
- *         {@link RoutePredicateHandlerMapping#validateRoute} 做框架级校验。</li>
+ *     <li>命中后调用父类 {@link RoutePredicateHandlerMapping#validateRoute} 做框架级校验；
+ *         父类 {@link RoutePredicateHandlerMapping#getHandlerInternal} 随后会移除
+ *         {@link ServerWebExchangeUtils#GATEWAY_PREDICATE_ROUTE_ATTR} 并设置 {@link ServerWebExchangeUtils#GATEWAY_ROUTE_ATTR}，
+ *         下游过滤器应以 {@code GATEWAY_ROUTE_ATTR} 为准。</li>
  * </ol>
  *
  * <p>标为 {@link Primary} 以便在存在多个 {@code RoutePredicateHandlerMapping} Bean 时优先本实现。</p>
@@ -139,17 +141,7 @@ public class IndexedRouteMapping extends RoutePredicateHandlerMapping {
                     });
             })
             .map(route -> {
-
-                log.info("routeId1:{}", route.getId());
-
-                exchange.getAttributes().put(
-                    ServerWebExchangeUtils.GATEWAY_PREDICATE_ROUTE_ATTR,
-                    route.getId()
-                );
-                String routeId = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_PREDICATE_ROUTE_ATTR);
-
-                log.info("routeId2:{}", routeId);
-
+                log.info("routeId:{}", route.getId());
                 validateRoute(route, exchange);
                 return route;
             });
