@@ -1,5 +1,6 @@
 package com.g2rain.gateway.route;
 
+import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.gateway.client.BasisServiceClient;
@@ -157,7 +158,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
             .thenMany(Flux.fromIterable(routes.values()).flatMap(this::doLoadRoute))
             .then(Mono.fromRunnable(() -> routeMatchHolder.replace(toMatchRules(routeDefinitions.values()))))
             .then(Mono.fromRunnable(() ->
-                log.info("路由刷新成功, 本批条数={}, 当前路由定义数={}", batchSize, routeDefinitions.size())
+                log.info("路由刷新成功, 本批条数={}, 当前路由定义数={}, 路由列表:{}", batchSize, routeDefinitions.size(), JsonCodecFactory.instance().obj2str(routeDefinitions))
             ))
             .then(Mono.defer(this::publish));
     }

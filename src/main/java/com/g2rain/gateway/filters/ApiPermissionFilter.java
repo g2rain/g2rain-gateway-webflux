@@ -3,6 +3,7 @@ package com.g2rain.gateway.filters;
 
 import com.g2rain.common.enums.SessionType;
 import com.g2rain.common.exception.SystemErrorCode;
+import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.gateway.cache.PassportPerm;
 import com.g2rain.gateway.cache.UserPerm;
@@ -54,6 +55,8 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
     @SuppressWarnings("ConstantConditions")
     private Mono<Void> authorize(ServerWebExchange exchange, GatewayFilterChain chain, EdgePrincipalContext context) {
         String routeId = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_PREDICATE_ROUTE_ATTR);
+        log.info("routeId:{}", routeId);
+
         Long applicationId = context.getApplicationId();
         Long apiId = null;
         if (Strings.isNotBlank(routeId)) {
@@ -63,6 +66,8 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
 
             }
         }
+
+        log.info("apiId:{}", apiId);
 
         if (Objects.isNull(apiId)) {
             return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
@@ -81,6 +86,8 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
         return userPerm.getApiPermission(context.getOrganId(), context.getUserId(), applicationId, apiId)
             .switchIfEmpty(Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId)))
             .flatMap(userApiPermission -> {
+                log.info("userApiPermission:{}", JsonCodecFactory.instance().obj2str(userApiPermission));
+
                 if (!Strings.equals(Constants.AUTHORIZATION_ACTIVATED, userApiPermission.getStatus())) {
                     return Mono.error(new GatewayException(GatewayErrorCode.SUBSCRIPTION_EXPIRED));
                 }
