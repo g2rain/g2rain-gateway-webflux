@@ -139,13 +139,16 @@ public class IndexedRouteMapping extends RoutePredicateHandlerMapping {
                     });
             })
             .map(route -> {
+
+                log.info("routeId1:{}", route.getId());
+
                 exchange.getAttributes().put(
                     ServerWebExchangeUtils.GATEWAY_PREDICATE_ROUTE_ATTR,
                     route.getId()
                 );
                 String routeId = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_PREDICATE_ROUTE_ATTR);
 
-                log.info("routeId:{}", routeId);
+                log.info("routeId2:{}", routeId);
 
                 validateRoute(route, exchange);
                 return route;
