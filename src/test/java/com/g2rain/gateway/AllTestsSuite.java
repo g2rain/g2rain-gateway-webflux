@@ -12,6 +12,7 @@ import com.g2rain.gateway.filters.PrincipalForwardFilterTest;
 import com.g2rain.gateway.filters.ResponseAdjustFilterTest;
 import com.g2rain.gateway.filters.SignVerificationFilterTest;
 import com.g2rain.gateway.filters.TraceLoggingFilterTest;
+import com.g2rain.gateway.matcher.MatcherUtilsTest;
 import com.g2rain.gateway.model.context.EdgePrincipalContextHolderTest;
 import com.g2rain.gateway.model.context.EdgePrincipalContextTest;
 import com.g2rain.gateway.model.route.RouteDefinitionVoTest;
@@ -43,6 +44,7 @@ import org.junit.platform.suite.api.SuiteDisplayName;
     ResponseAdjustFilterTest.class,
     SignVerificationFilterTest.class,
     TraceLoggingFilterTest.class,
+    MatcherUtilsTest.class,
     RFC3986EncoderTest.class,
     RFC3986Test.class,
     ErrorMessageStorageTest.class,

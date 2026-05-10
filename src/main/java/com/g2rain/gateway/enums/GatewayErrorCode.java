@@ -11,7 +11,7 @@ import com.g2rain.common.exception.ErrorCode;
 public enum GatewayErrorCode implements ErrorCode {
     TOKEN_INVALID("gateway.40001", "token invalid"),
     TOKEN_EXPIRED("gateway.40002", "token expired"),
-    ;
+    SUBSCRIPTION_EXPIRED("gateway.40003", "Subscription expired, please renew");
 
     private final String code;
 
