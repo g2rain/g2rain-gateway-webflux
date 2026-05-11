@@ -44,7 +44,7 @@ public final class EdgePrincipalContextHolder {
 
     /**
      * 获取当前 Reactor 流程中的 EdgePrincipalContext。
-     * 如果 Context 中不存在，则创建一个新的并存入 Context。
+     * 如果 Context 中不存在，则返回一个新的空上下文作为兜底。
      *
      * @return 包含 EdgePrincipalContext 的 Mono
      */
@@ -65,10 +65,27 @@ public final class EdgePrincipalContextHolder {
                 return Mono.just(context);
             }
 
-            EdgePrincipalContext newCtx = EdgePrincipalContext.of();
-            return Mono.just(newCtx).contextWrite(ctx ->
-                ctx.put(EDGE_PRINCIPAL_CONTEXT, newCtx)
+            return Mono.just(EdgePrincipalContext.of());
+        });
+    }
+
+    /**
+     * 获取当前 Reactor 流程中的 EdgePrincipalContext。
+     * 如果 Context 中不存在，则返回错误，用于需要强约束上下文存在的链路。
+     *
+     * @return 包含 EdgePrincipalContext 的 Mono
+     */
+    public static Mono<@NonNull EdgePrincipalContext> require() {
+        return Mono.deferContextual(contextView -> {
+            EdgePrincipalContext context = contextView.getOrDefault(
+                EDGE_PRINCIPAL_CONTEXT, null
             );
+
+            if (Objects.nonNull(context)) {
+                return Mono.just(context);
+            }
+
+            return Mono.error(new IllegalStateException("EdgePrincipalContext not found in Reactor Context"));
         });
     }
 
