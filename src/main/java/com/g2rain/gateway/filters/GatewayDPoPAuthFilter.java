@@ -144,10 +144,8 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
                 observation.highCardinalityKeyValue(KeyValue.of(Constants.REQUEST_ID, payload.getJti()));
             }
 
-            // 构建鉴权上下文 -> 注入上下文并继续过滤链
-            return buildPrincipalContext(context, hashAlgorithm, payload).then(chain.filter(exchange).contextWrite(ctx ->
-                EdgePrincipalContextHolder.put(ctx, context)
-            ));
+            // 构建鉴权上下文并继续过滤链
+            return buildPrincipalContext(context, hashAlgorithm, payload).then(chain.filter(exchange));
         });
     }
 

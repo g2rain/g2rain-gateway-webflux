@@ -17,6 +17,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.route.Route;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.Ordered;
 import org.springframework.stereotype.Component;
@@ -26,7 +27,10 @@ import reactor.core.publisher.Mono;
 import java.util.Objects;
 
 /**
- * 接口权限校验：基于 {@link ServerWebExchangeUtils#GATEWAY_PREDICATE_ROUTE_ATTR} 中的路由 id（资源接口 id）做 Passport / User 鉴权。
+ * 接口权限校验：基于已匹配的 {@link Route#getId()}（与 {@link ServerWebExchangeUtils#GATEWAY_ROUTE_ATTR} 一致）做 Passport / User 鉴权
+ *
+ * @author alpha
+ * @since 2026/05/07
  */
 @Slf4j
 @Component
@@ -53,7 +57,8 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
 
     @SuppressWarnings("ConstantConditions")
     private Mono<Void> authorize(ServerWebExchange exchange, GatewayFilterChain chain, EdgePrincipalContext context) {
-        String routeId = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_PREDICATE_ROUTE_ATTR);
+        Route gatewayRoute = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
+        String routeId = gatewayRoute != null ? gatewayRoute.getId() : null;
         Long applicationId = context.getApplicationId();
         Long apiId = null;
         if (Strings.isNotBlank(routeId)) {

@@ -2,12 +2,13 @@
  * Spring Cloud Gateway 核心过滤器包。
  *
  * <p>
- * 本包包含网关中用于请求处理的核心过滤器，实现了请求体缓存、鉴权、Principal 转发、
- * 请求/响应日志记录、签名验证以及响应调整等功能，形成完整的网关处理链。
+ * 本包包含网关中用于请求处理的核心过滤器，实现了请求级上下文作用域、请求体缓存、
+ * 鉴权、Principal 转发、请求/响应日志记录、签名验证以及响应调整等功能，形成完整的网关处理链。
  * </p>
  *
  * <h2>核心过滤器</h2>
  * <ul>
+ *     <li><b>EdgePrincipalContextScopeFilter</b> — 创建并绑定请求级 Principal 上下文，预填充 Accept-Language；优先级 {@code 0}。</li>
  *     <li><b>CachedBodyFilter</b> — 全局请求体与响应体缓存，确保请求体可重复读取；优先级 {@code 100}。</li>
  *     <li><b>TraceLoggingFilter</b> — 请求与响应日志记录，记录请求路径、方法、查询参数、请求头、请求体以及响应体（JSON）；优先级 {@code 200}。</li>
  *     <li><b>GatewayTokenAuthFilter</b> — Token JWT 鉴权，验证 Authorization Header 中的 Token 并构建 {@link com.g2rain.gateway.model.context.EdgePrincipalContext}；优先级 {@code 300}。</li>
@@ -21,6 +22,7 @@
  * <h2>过滤器执行顺序</h2>
  * <ol>
  *
+ *     <li>{@link com.g2rain.gateway.filters.EdgePrincipalContextScopeFilter} — 创建请求级上下文，优先级 {@code 0}</li>
  *     <li>{@link com.g2rain.gateway.filters.CachedBodyFilter} — 请求体缓存，优先级 {@code 100}</li>
  *     <li>{@link com.g2rain.gateway.filters.TraceLoggingFilter} — 请求/响应日志记录，优先级 {@code 200}</li>
  *     <li>{@link com.g2rain.gateway.filters.GatewayTokenAuthFilter} — Token JWT 鉴权，优先级 {@code 300}</li>
@@ -33,6 +35,7 @@
  *
  * <h2>注意事项</h2>
  * <ul>
+ *     <li>{@link com.g2rain.gateway.filters.EdgePrincipalContextScopeFilter} 必须在其他依赖 {@link com.g2rain.gateway.model.context.EdgePrincipalContext} 的过滤器之前执行。</li>
  *     <li>{@link com.g2rain.gateway.filters.CachedBodyFilter} 必须在其他需要读取请求体的过滤器之前执行。</li>
  *     <li>Token JWT 鉴权必须在 Principal 转发和签名验证之前完成。</li>
  *     <li>DPoP Proof 鉴权依赖请求携带 DPoP JWT，必须在签名验证之前完成。</li>
