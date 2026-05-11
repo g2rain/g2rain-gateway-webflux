@@ -142,6 +142,7 @@ public class TraceLoggingFilter implements GlobalFilter, Ordered {
 
             return EdgePrincipalContextHolder.get().doOnNext(ctx -> {
                 try {
+                    log.info("ctx:{}", JsonCodecFactory.instance().obj2str(ctx));
                     GatewayEvent gatewayEvent = GatewayEvent.builder()
                         .buildHeaders(exchange)
                         .buildPrincipal(ctx)
