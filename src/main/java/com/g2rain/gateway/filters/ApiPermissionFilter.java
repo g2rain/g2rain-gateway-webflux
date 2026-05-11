@@ -3,7 +3,6 @@ package com.g2rain.gateway.filters;
 
 import com.g2rain.common.enums.SessionType;
 import com.g2rain.common.exception.SystemErrorCode;
-import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.gateway.cache.PassportPerm;
 import com.g2rain.gateway.cache.UserPerm;
@@ -28,11 +27,10 @@ import reactor.core.publisher.Mono;
 import java.util.Objects;
 
 /**
- * 接口权限校验：基于已匹配的 {@link Route#getId()}（与 {@link ServerWebExchangeUtils#GATEWAY_ROUTE_ATTR} 一致）做 Passport / User 鉴权。
+ * 接口权限校验：基于已匹配的 {@link Route#getId()}（与 {@link ServerWebExchangeUtils#GATEWAY_ROUTE_ATTR} 一致）做 Passport / User 鉴权
  *
- * <p>说明：{@link ServerWebExchangeUtils#GATEWAY_PREDICATE_ROUTE_ATTR} 仅在路由谓词试探阶段由框架写入，
- * {@link org.springframework.cloud.gateway.handler.RoutePredicateHandlerMapping#getHandlerInternal} 在确定路由后会将其 {@code remove}，
- * 全局过滤器中应使用 {@link ServerWebExchangeUtils#GATEWAY_ROUTE_ATTR}。</p>
+ * @author alpha
+ * @since 2026/05/07
  */
 @Slf4j
 @Component
@@ -61,8 +59,6 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
     private Mono<Void> authorize(ServerWebExchange exchange, GatewayFilterChain chain, EdgePrincipalContext context) {
         Route gatewayRoute = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
         String routeId = gatewayRoute != null ? gatewayRoute.getId() : null;
-        log.info("routeId:{}", routeId);
-
         Long applicationId = context.getApplicationId();
         Long apiId = null;
         if (Strings.isNotBlank(routeId)) {
@@ -72,8 +68,6 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
 
             }
         }
-
-        log.info("apiId:{}", apiId);
 
         if (Objects.isNull(apiId)) {
             return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
@@ -92,8 +86,6 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
         return userPerm.getApiPermission(context.getOrganId(), context.getUserId(), applicationId, apiId)
             .switchIfEmpty(Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId)))
             .flatMap(userApiPermission -> {
-                log.info("userApiPermission:{}", JsonCodecFactory.instance().obj2str(userApiPermission));
-
                 if (!Strings.equals(Constants.AUTHORIZATION_ACTIVATED, userApiPermission.getStatus())) {
                     return Mono.error(new GatewayException(GatewayErrorCode.SUBSCRIPTION_EXPIRED));
                 }

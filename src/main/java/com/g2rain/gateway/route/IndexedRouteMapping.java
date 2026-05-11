@@ -1,6 +1,5 @@
 package com.g2rain.gateway.route;
 
-import com.g2rain.common.json.JsonCodecFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.springframework.cloud.gateway.config.GlobalCorsProperties;
@@ -118,14 +117,8 @@ public class IndexedRouteMapping extends RoutePredicateHandlerMapping {
         HttpMethod method = exchange.getRequest().getMethod();
         String path = exchange.getRequest().getPath().pathWithinApplication().value();
         Map<String, Route> snapshot = routesById.get();
-
-        log.info("routes:{}", JsonCodecFactory.instance().obj2str(routesById));
-
         return routeMatchHolder.matchRoute(method, path, routeId -> {
                 Route route = snapshot.get(String.valueOf(routeId));
-
-                log.info("route:{}", JsonCodecFactory.instance().obj2str(route));
-
                 if (Objects.isNull(route)) {
                     // 索引侧有 id 但快照中尚无对应 Route（刷新延迟或配置不一致）
                     return Mono.empty();
@@ -141,7 +134,6 @@ public class IndexedRouteMapping extends RoutePredicateHandlerMapping {
                     });
             })
             .map(route -> {
-                log.info("routeId:{}", route.getId());
                 validateRoute(route, exchange);
                 return route;
             });

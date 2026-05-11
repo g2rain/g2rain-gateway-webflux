@@ -1,6 +1,5 @@
 package com.g2rain.gateway.route;
 
-import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.gateway.client.BasisServiceClient;
@@ -63,27 +62,27 @@ import java.util.stream.Collectors;
 public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerFactoryCustomizer<@NonNull NettyReactiveWebServerFactory>, ApplicationEventPublisherAware {
 
     /**
-     * 每条动态路由统一挂载的一级路径裁剪过滤器，与路径前缀拼装策略配套。
+     * 每条动态路由统一挂载的一级路径裁剪过滤器，与路径前缀拼装策略配套
      */
     private static final List<FilterDefinition> STRIP_PREFIX_FILTERS = List.of(new FilterDefinition("StripPrefix=1"));
 
     /**
-     * Spring Cloud Gateway 框架读取的「路由定义」表：key 为路由 id 字符串，与 {@link RouteDefinition#getId} 一致。
+     * Spring Cloud Gateway 框架读取的「路由定义」表：key 为路由 id 字符串，与 {@link RouteDefinition#getId} 一致
      */
     private final Map<String, RouteDefinition> routes = new ConcurrentHashMap<>();
 
     /**
-     * 控制面下发的路由 VO 真相源：key 为数值型路由 id，供增量 upsert/remove 与全量 replace 使用。
+     * 控制面下发的路由 VO 真相源：key 为数值型路由 id，供增量 upsert/remove 与全量 replace 使用
      */
     private final ConcurrentMap<Long, RouteDefinitionVo> routeDefinitions = new ConcurrentHashMap<>();
 
     /**
-     * 与 {@link RouteDefinition} 并行的路径匹配索引；id 与 VO、SCG Route 一致。
+     * 与 {@link RouteDefinition} 并行的路径匹配索引；id 与 VO、SCG Route 一致
      */
     private final RouteMatchHolder routeMatchHolder;
 
     /**
-     * 拉取 Basis 侧路由与注册信息的 Feign/Reactive 客户端。
+     * 拉取 Basis 侧路由与注册信息的 Feign/Reactive 客户端
      */
     private final BasisServiceClient basisServiceClient;
 
@@ -102,7 +101,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * Netty 启动前同步阻塞加载全量路由，保证首个请求可见完整路由表。
+     * Netty 启动前同步阻塞加载全量路由，保证首个请求可见完整路由表
      *
      * @param factory 响应式 WebServer 工厂
      */
@@ -118,9 +117,9 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
 
     /**
      * 从 Basis 拉取 API 路由与注册列表，合并去重后刷新 {@link #routeDefinitions}、{@link #routes}、{@link RouteMatchHolder}，
-     * 并发布刷新事件。
+     * 并发布刷新事件
      *
-     * <p>合并策略：API 列表与注册中心列表各自转成 map 后 {@code putAll}；同一 id 时后一次 {@code putAll}（注册中心派生路由）覆盖前者。</p>
+     * <p>合并策略：API 列表与注册中心列表各自转成 map 后 {@code putAll}；同一 id 时后一次 {@code putAll}（注册中心派生路由）覆盖前者</p>
      *
      * @return 完成时发出空完成的 {@link Mono}
      */
@@ -142,9 +141,9 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * 将本批路由合并进 {@link #routeDefinitions}，写入 SCG 定义表，按当前完整 {@code routeDefinitions} 重建匹配索引并发布刷新事件。
+     * 将本批路由合并进 {@link #routeDefinitions}，写入 SCG 定义表，按当前完整 {@code routeDefinitions} 重建匹配索引并发布刷新事件
      *
-     * <p>仅 {@code putAll}，不 {@code clear}；启动时 {@link #load()} 在空表上写入即等价全量，消息批量创建则为增量合并。</p>
+     * <p>仅 {@code putAll}，不 {@code clear}；启动时 {@link #load()} 在空表上写入即等价全量，消息批量创建则为增量合并</p>
      *
      * @param routes key 为路由 id；空 map 时 {@link Mono#empty()}
      */
@@ -158,15 +157,15 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
             .thenMany(Flux.fromIterable(routes.values()).flatMap(this::doLoadRoute))
             .then(Mono.fromRunnable(() -> routeMatchHolder.replace(toMatchRules(routeDefinitions.values()))))
             .then(Mono.fromRunnable(() ->
-                log.info("路由刷新成功, 本批条数={}, 当前路由定义数={}, 路由列表:{}", batchSize, routeDefinitions.size(), JsonCodecFactory.instance().obj2str(routeDefinitions))
+                log.info("路由刷新成功, 本批条数={}, 当前路由定义数={}", batchSize, routeDefinitions.size())
             ))
             .then(Mono.defer(this::publish));
     }
 
     /**
-     * 单条 upsert：更新 SCG {@link RouteDefinition}、VO 缓存与 {@link RouteMatchHolder}，并发布事件。
+     * 单条 upsert：更新 SCG {@link RouteDefinition}、VO 缓存与 {@link RouteMatchHolder}，并发布事件
      *
-     * <p>若 VO 无法编译为有效匹配规则（路径非法等），则从 VO 表与索引中移除该 id，避免「半条」路由。</p>
+     * <p>若 VO 无法编译为有效匹配规则（路径非法等），则从 VO 表与索引中移除该 id，避免「半条」路由</p>
      *
      * @param route 单条定义
      * @return 空完成的 {@link Mono}
@@ -195,7 +194,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * 删除单条：从仓库、VO 表、匹配索引中移除并发布事件。
+     * 删除单条：从仓库、VO 表、匹配索引中移除并发布事件
      *
      * @param routeId 路由 id
      * @return 空完成的 {@link Mono}
@@ -213,7 +212,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * 将单条 VO 转为 {@link RouteDefinition} 并写入框架仓库（{@link #save}）。
+     * 将单条 VO 转为 {@link RouteDefinition} 并写入框架仓库（{@link #save}）
      *
      * @param route 路由 VO
      * @return 成功时空完成；编译异常时返回 {@link Mono#error}
@@ -228,7 +227,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * 组装 SCG 所需的 {@link RouteDefinition}：URI、元数据、谓词与固定过滤器。
+     * 组装 SCG 所需的 {@link RouteDefinition}：URI、元数据、谓词与固定过滤器
      *
      * @param route 源 VO
      * @return 可直接 {@link #save} 的定义
@@ -244,7 +243,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * 构建 Gateway 谓词：必选 Path；若声明了 HTTP 方法则追加 Method。
+     * 构建 Gateway 谓词：必选 Path；若声明了 HTTP 方法则追加 Method
      *
      * @param route 源 VO
      * @return 谓词列表（顺序可能影响 SCG 内部优化，一般 Path 在前）
@@ -261,7 +260,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * 将多条 VO 转为 {@link RuleDefinition} 列表，供 {@link RouteMatchHolder#replace} 使用。
+     * 将多条 VO 转为 {@link RuleDefinition} 列表，供 {@link RouteMatchHolder#replace} 使用
      *
      * @param routes 可迭代 VO 集合
      * @return 仅包含可编译为有效规则的项
@@ -276,7 +275,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * 将单条 VO 转为匹配引擎用的 {@link RuleDefinition}：target 与 id 相同（均为 Long 型路由主键）。
+     * 将单条 VO 转为匹配引擎用的 {@link RuleDefinition}：target 与 id 相同（均为 Long 型路由主键）
      *
      * @param vo 源 VO
      * @return 路径或 id 无效时为空
@@ -313,7 +312,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * 通知网关框架重新装配 {@link org.springframework.cloud.gateway.route.Route}（见 {@link IndexedRouteMapping#onRefresh}）。
+     * 通知网关框架重新装配 {@link org.springframework.cloud.gateway.route.Route}（见 {@link IndexedRouteMapping#onRefresh}）
      *
      * @return 空 {@link Mono}
      */
@@ -323,7 +322,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * {@link RouteDefinitionRepository}：返回当前内存中全部路由定义。
+     * {@link RouteDefinitionRepository}：返回当前内存中全部路由定义
      *
      * @return 路由定义流
      */
@@ -333,7 +332,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * {@link RouteDefinitionRepository}：写入或覆盖单条定义。
+     * {@link RouteDefinitionRepository}：写入或覆盖单条定义
      *
      * @param route 异步单条定义
      * @return 空完成的 {@link Mono}
@@ -347,7 +346,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * {@link RouteDefinitionRepository}：按 id 删除单条。
+     * {@link RouteDefinitionRepository}：按 id 删除单条
      *
      * @param routeId 路由 id（字符串）
      * @return 空完成的 {@link Mono}
@@ -361,7 +360,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * 批量从内存表移除（供全量 load 前清空旧路由）。
+     * 批量从内存表移除（供全量 load 前清空旧路由）
      *
      * @param routeIds 待删 id 集合
      * @return 空集合时立即完成
@@ -376,7 +375,7 @@ public class GatewayRouteLoader implements RouteDefinitionRepository, WebServerF
     }
 
     /**
-     * 注入事件发布器（Spring 回调）。
+     * 注入事件发布器（Spring 回调）
      *
      * @param publisher 应用事件总线
      */
