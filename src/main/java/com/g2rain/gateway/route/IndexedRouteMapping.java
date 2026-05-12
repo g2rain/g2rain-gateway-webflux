@@ -82,6 +82,7 @@ public class IndexedRouteMapping extends RoutePredicateHandlerMapping {
         super(webHandler, routeLocator, globalCorsProperties, environment);
         this.routeLocator = routeLocator;
         this.routeMatchHolder = routeMatchHolder;
+        log.info("IndexedRouteMapping 已启用（路径索引 + RoutePredicateHandlerMapping）");
     }
 
     /**
@@ -116,15 +117,17 @@ public class IndexedRouteMapping extends RoutePredicateHandlerMapping {
     protected @NonNull Mono<Route> lookupRoute(ServerWebExchange exchange) {
         HttpMethod method = exchange.getRequest().getMethod();
         String path = exchange.getRequest().getPath().pathWithinApplication().value();
-
-        log.info("path:{}, method:{}", path, method);
+        if (log.isDebugEnabled()) {
+            log.debug("gateway lookupRoute method={} pathWithinApplication={} requestUri={}",
+                method, path, exchange.getRequest().getURI());
+        }
 
         Map<String, Route> snapshot = routesById.get();
         return routeMatchHolder.matchRoute(method, path, routeId -> {
                 Route route = snapshot.get(String.valueOf(routeId));
                 if (Objects.isNull(route)) {
-                    log.info("..........");
-                    // 索引侧有 id 但快照中尚无对应 Route（刷新延迟或配置不一致）
+                    log.warn("gateway 索引命中 routeId={} 但运行时快照中无对应 Route（刷新延迟或配置不一致） path={} method={}",
+                        routeId, path, method);
                     return Mono.empty();
                 }
 
@@ -137,7 +140,16 @@ public class IndexedRouteMapping extends RoutePredicateHandlerMapping {
                         return Mono.empty();
                     });
             })
+            .switchIfEmpty(Mono.defer(() -> {
+                log.warn(
+                    "gateway 未匹配到任何 Route（后续可能落静态资源并出现 No static resource） method={} pathWithinApplication={} requestUri={}",
+                    method, path, exchange.getRequest().getURI());
+                return Mono.empty();
+            }))
             .map(route -> {
+                if (log.isDebugEnabled()) {
+                    log.debug("gateway Route 命中 routeId={} pathWithinApplication={}", route.getId(), path);
+                }
                 validateRoute(route, exchange);
                 return route;
             });

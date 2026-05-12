@@ -87,7 +87,14 @@ public class GlobalErrorHandler implements ErrorWebExceptionHandler, Ordered {
     @Override
     public @NonNull Mono<@NonNull Void> handle(@NonNull ServerWebExchange exchange, @NonNull Throwable ex) {
         ServerHttpResponse response = exchange.getResponse();
-        log.error("全局异常处理-{}: {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
+        log.error(
+            "全局异常处理-{} method={} requestUri={} pathWithinApplication={}: {}",
+            ex.getClass().getSimpleName(),
+            exchange.getRequest().getMethod(),
+            exchange.getRequest().getURI(),
+            exchange.getRequest().getPath().pathWithinApplication().value(),
+            ex.getMessage(),
+            ex);
 
         // 响应已提交，无法处理
         if (response.isCommitted()) {
