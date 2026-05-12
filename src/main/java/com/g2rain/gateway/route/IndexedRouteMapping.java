@@ -116,10 +116,14 @@ public class IndexedRouteMapping extends RoutePredicateHandlerMapping {
     protected @NonNull Mono<Route> lookupRoute(ServerWebExchange exchange) {
         HttpMethod method = exchange.getRequest().getMethod();
         String path = exchange.getRequest().getPath().pathWithinApplication().value();
+
+        log.info("path:{}, method:{}", path, method);
+
         Map<String, Route> snapshot = routesById.get();
         return routeMatchHolder.matchRoute(method, path, routeId -> {
                 Route route = snapshot.get(String.valueOf(routeId));
                 if (Objects.isNull(route)) {
+                    log.info("..........");
                     // 索引侧有 id 但快照中尚无对应 Route（刷新延迟或配置不一致）
                     return Mono.empty();
                 }
