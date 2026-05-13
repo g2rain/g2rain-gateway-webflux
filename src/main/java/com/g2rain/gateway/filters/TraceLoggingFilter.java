@@ -39,6 +39,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 请求与响应日志记录过滤器。
@@ -81,6 +82,13 @@ import java.util.Objects;
 @Component
 @AllArgsConstructor
 public class TraceLoggingFilter implements GlobalFilter, Ordered {
+
+    /**
+     * 不向 Kafka 投递网关事件的请求路径（与 {@link #collectBasicRequestInfo} 中 pathWithinApplication 一致）。
+     */
+    private static final Set<String> KAFKA_SEND_EXCLUDED_PATHS = Set.of(
+        "/basis/audit_event/list", "/basis/audit_event/page"
+    );
 
     /**
      * 网关侧 Kafka 日志发送
@@ -139,6 +147,11 @@ public class TraceLoggingFilter implements GlobalFilter, Ordered {
             }
 
             log.info(new String(cachedBody, StandardCharsets.UTF_8));
+
+            String path = exchange.getRequest().getPath().pathWithinApplication().value();
+            if (KAFKA_SEND_EXCLUDED_PATHS.contains(path)) {
+                return Mono.empty();
+            }
 
             return EdgePrincipalContextHolder.get().doOnNext(ctx -> {
                 try {
