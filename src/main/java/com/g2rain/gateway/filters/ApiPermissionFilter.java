@@ -33,7 +33,7 @@ import java.util.Objects;
  * @since 2026/05/07
  */
 @Slf4j
-//@Component
+@Component
 @AllArgsConstructor
 public class ApiPermissionFilter implements GlobalFilter, Ordered {
 
