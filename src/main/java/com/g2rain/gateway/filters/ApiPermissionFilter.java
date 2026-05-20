@@ -4,7 +4,7 @@ package com.g2rain.gateway.filters;
 import com.g2rain.common.enums.SessionType;
 import com.g2rain.common.exception.SystemErrorCode;
 import com.g2rain.common.utils.Strings;
-import com.g2rain.gateway.cache.PassportPerm;
+import com.g2rain.gateway.cache.GlobalPerm;
 import com.g2rain.gateway.cache.UserPerm;
 import com.g2rain.gateway.enums.GatewayErrorCode;
 import com.g2rain.gateway.exception.GatewayException;
@@ -33,11 +33,11 @@ import java.util.Objects;
  * @since 2026/05/07
  */
 @Slf4j
-@Component
+//@Component
 @AllArgsConstructor
 public class ApiPermissionFilter implements GlobalFilter, Ordered {
 
-    private final PassportPerm passportPerm;
+    private final GlobalPerm globalPerm;
 
     private final UserPerm userPerm;
 
@@ -60,38 +60,42 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
         Route gatewayRoute = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
         String routeId = gatewayRoute != null ? gatewayRoute.getId() : null;
         Long applicationId = context.getApplicationId();
-        Long apiId = null;
+        Long parsedApiId = null;
         if (Strings.isNotBlank(routeId)) {
             try {
-                apiId = Long.valueOf(routeId);
+                parsedApiId = Long.valueOf(routeId);
             } catch (Exception _) {
 
             }
         }
 
-        if (Objects.isNull(apiId)) {
+        if (Objects.isNull(parsedApiId)) {
             return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
         }
 
-        if (SessionType.isPassport(context.getSessionType())) {
-            return passportPerm.hasApiPermission(apiId).flatMap(ok -> {
-                if (!ok) {
-                    return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
-                }
-
+        // 先校验全局权限（所有会话类型都先走）
+        final Long apiId = parsedApiId;
+        return globalPerm.hasApiPermission(apiId).flatMap(hasGlobalApiPermission -> {
+            if (hasGlobalApiPermission) {
                 return chain.filter(exchange);
-            });
-        }
+            }
 
-        return userPerm.getApiPermission(context.getOrganId(), context.getUserId(), applicationId, apiId)
-            .switchIfEmpty(Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId)))
-            .flatMap(userApiPermission -> {
-                if (!Strings.equals(Constants.AUTHORIZATION_ACTIVATED, userApiPermission.getStatus())) {
-                    return Mono.error(new GatewayException(GatewayErrorCode.SUBSCRIPTION_EXPIRED));
-                }
+            // 全局没权限，再判断是否账号类型
+            if (SessionType.isPassport(context.getSessionType())) {
+                return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
+            }
 
-                return chain.filter(exchange);
-            });
+            // 用户权限校验
+            return userPerm.getApiPermission(context.getOrganId(), context.getUserId(), applicationId, apiId)
+                .switchIfEmpty(Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId)))
+                .flatMap(userApiPermission -> {
+                    if (!Strings.equals(Constants.AUTHORIZATION_ACTIVATED, userApiPermission.getStatus())) {
+                        return Mono.error(new GatewayException(GatewayErrorCode.SUBSCRIPTION_EXPIRED));
+                    }
+
+                    return chain.filter(exchange);
+                });
+        });
     }
 
     @Override
