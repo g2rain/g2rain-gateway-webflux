@@ -75,22 +75,22 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
 
         if (SessionType.isPassport(context.getSessionType())) {
             return defaultPerm.hasApiPermission(apiId).flatMap(ok -> {
-                if (!ok) {
-                    return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
+                if (ok) {
+                    return chain.filter(exchange);
                 }
 
-                return chain.filter(exchange);
+                return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
             });
         }
 
         return userPerm.getApiPermission(context.getOrganId(), context.getUserId(), applicationId, apiId)
             .switchIfEmpty(Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId)))
             .flatMap(userApiPermission -> {
-                if (!Strings.equals(Constants.AUTHORIZATION_ACTIVATED, userApiPermission.getStatus())) {
-                    return Mono.error(new GatewayException(GatewayErrorCode.SUBSCRIPTION_EXPIRED));
+                if (Strings.equals(Constants.AUTHORIZATION_ACTIVATED, userApiPermission.getStatus())) {
+                    return chain.filter(exchange);
                 }
 
-                return chain.filter(exchange);
+                return Mono.error(new GatewayException(GatewayErrorCode.SUBSCRIPTION_EXPIRED));
             });
     }
 
