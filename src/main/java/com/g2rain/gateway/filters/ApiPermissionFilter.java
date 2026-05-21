@@ -4,7 +4,7 @@ package com.g2rain.gateway.filters;
 import com.g2rain.common.enums.SessionType;
 import com.g2rain.common.exception.SystemErrorCode;
 import com.g2rain.common.utils.Strings;
-import com.g2rain.gateway.cache.PassportPerm;
+import com.g2rain.gateway.cache.DefaultPerm;
 import com.g2rain.gateway.cache.UserPerm;
 import com.g2rain.gateway.enums.GatewayErrorCode;
 import com.g2rain.gateway.exception.GatewayException;
@@ -37,7 +37,7 @@ import java.util.Objects;
 @AllArgsConstructor
 public class ApiPermissionFilter implements GlobalFilter, Ordered {
 
-    private final PassportPerm passportPerm;
+    private final DefaultPerm defaultPerm;
 
     private final UserPerm userPerm;
 
@@ -74,7 +74,7 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
         }
 
         if (SessionType.isPassport(context.getSessionType())) {
-            return passportPerm.hasApiPermission(apiId).flatMap(ok -> {
+            return defaultPerm.hasApiPermission(apiId).flatMap(ok -> {
                 if (!ok) {
                     return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
                 }
