@@ -88,7 +88,9 @@ public class ApiKeyCache extends AbstractMessageStorage<String, String, String> 
 
     @Override
     public void create(@NonNull String key, String value) {
+        log.info("before cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
         delete(key);
+        log.info("after cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
     }
 
     @Override
@@ -100,7 +102,9 @@ public class ApiKeyCache extends AbstractMessageStorage<String, String, String> 
 
     @Override
     public void update(@NonNull String key, String value) {
+        log.info("before cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
         delete(key);
+        log.info("after cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
     }
 
     @Override
