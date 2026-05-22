@@ -1,13 +1,15 @@
 package com.g2rain.gateway.client;
 
 
+import com.g2rain.common.exception.ExceptionConverter;
+import com.g2rain.common.model.Result;
+import com.g2rain.common.utils.Strings;
+import com.g2rain.gateway.model.auth.StaticAccessTokenResolve;
+import com.g2rain.gateway.model.cache.AppIdName;
+import com.g2rain.gateway.model.cache.OrganIdName;
 import com.g2rain.gateway.model.route.BaseAuthorityApiVo;
 import com.g2rain.gateway.model.route.RouteDefinitionVo;
 import com.g2rain.gateway.model.route.ServiceRegistryVo;
-import com.g2rain.common.exception.ExceptionConverter;
-import com.g2rain.common.model.Result;
-import com.g2rain.gateway.model.cache.AppIdName;
-import com.g2rain.gateway.model.cache.OrganIdName;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -101,10 +103,10 @@ public class BasisServiceClient {
                 if (result.isSuccess()) {
                     // 返回 TokenJWTPayload
                     return Mono.just(result.getData());
-                } else { // status != 200
-                    // 统一抛出业务异常，带错误信息
-                    return Mono.error(ExceptionConverter.of(result));
                 }
+
+                // status != 200 统一抛出业务异常，带错误信息
+                return Mono.error(ExceptionConverter.of(result));
             })
             .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
     }
@@ -126,10 +128,10 @@ public class BasisServiceClient {
                 if (result.isSuccess()) {
                     // 返回 TokenJWTPayload
                     return Mono.just(result.getData());
-                } else { // status != 200
-                    // 统一抛出业务异常，带错误信息
-                    return Mono.error(ExceptionConverter.of(result));
                 }
+
+                // status != 200 统一抛出业务异常，带错误信息
+                return Mono.error(ExceptionConverter.of(result));
             })
             .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
     }
@@ -185,10 +187,44 @@ public class BasisServiceClient {
                 if (result.isSuccess()) {
                     // 返回 TokenJWTPayload
                     return Mono.just(result.getData());
-                } else { // status != 200
-                    // 统一抛出业务异常，带错误信息
+                }
+
+                // status != 200 统一抛出业务异常，带错误信息
+                return Mono.error(ExceptionConverter.of(result));
+            })
+            .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
+    }
+
+    /**
+     * 向 basis 解析个人静态访问令牌。
+     *
+     * <p>调用 {@code GET /login_token/static_access_token_context?apiKey=}。</p>
+     * <ul>
+     *     <li>{@code data == null} — 令牌不存在，返回 {@link Mono#empty()}，由 {@link com.g2rain.gateway.cache.ApiKeyCache} 视为 invalid。</li>
+     *     <li>{@code status == REVOKED} — 吊销，context 为空。</li>
+     *     <li>{@code status == ACTIVATED} — 激活，携带 {@link StaticAccessTokenResolve#getContext()}。</li>
+     * </ul>
+     *
+     * @param apiKey Bearer 后的原始凭证（明文，勿记录日志）
+     * @return 解析 VO；空白 apiKey 返回 empty
+     */
+    public Mono<StaticAccessTokenResolve> fetchStaticTokenResolve(String apiKey) {
+        if (Strings.isBlank(apiKey)) {
+            return Mono.empty();
+        }
+
+        return webClient.get()
+            .uri(uriBuilder -> uriBuilder.path("/login_token/static_access_token_context")
+                .queryParam("apiKey", apiKey)
+                .build())
+            .retrieve()
+            .bodyToMono(new ParameterizedTypeReference<Result<StaticAccessTokenResolve>>() {
+            })
+            .flatMap(result -> {
+                if (!result.isSuccess()) {
                     return Mono.error(ExceptionConverter.of(result));
                 }
+                return Mono.justOrEmpty(result.getData());
             })
             .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
     }

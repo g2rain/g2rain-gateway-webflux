@@ -96,6 +96,6 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return Ordered.HIGHEST_PRECEDENCE + 600;
+        return Ordered.HIGHEST_PRECEDENCE + 500;
     }
 }

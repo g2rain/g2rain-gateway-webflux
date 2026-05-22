@@ -11,5 +11,9 @@ public enum SyncerEnum {
     INTERNAL_ROUTE,
     API_ROUTE,
     PASSPORT_PERM,
-    USER_PERM
+    USER_PERM,
+    /**
+     * 个人静态访问令牌缓存失效：载荷为 tokenHash（SHA-256 hex），见 {@link com.g2rain.gateway.cache.ApiKeyCache}。
+     */
+    STATIC_ACCESS_TOKEN
 }
