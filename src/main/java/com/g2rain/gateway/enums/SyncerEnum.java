@@ -13,7 +13,7 @@ public enum SyncerEnum {
     PASSPORT_PERM,
     USER_PERM,
     /**
-     * 个人静态访问令牌缓存失效：载荷为 tokenHash（SHA-256 hex），见 {@link com.g2rain.gateway.cache.ApiKeyCache}。
+     * 个人静态访问令牌缓存失效：载荷为 {@link com.g2rain.gateway.model.cache.StaticAccessTokenHash}，见 {@link com.g2rain.gateway.cache.ApiKeyCache}。
      */
     STATIC_ACCESS_TOKEN
 }

@@ -1,7 +1,6 @@
 package com.g2rain.gateway.cache;
 
 
-import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.syncer.AbstractMessageStorage;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.gateway.client.BasisServiceClient;
@@ -9,6 +8,7 @@ import com.g2rain.gateway.enums.SyncerEnum;
 import com.g2rain.gateway.model.auth.ApiKeyResolveResult;
 import com.g2rain.gateway.model.auth.StaticAccessTokenResolve;
 import com.g2rain.gateway.model.auth.StaticTokenContext;
+import com.g2rain.gateway.model.cache.StaticAccessTokenHash;
 import com.g2rain.gateway.utils.DigestUtils;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -47,7 +47,7 @@ import java.util.concurrent.TimeUnit;
  * <h2>同步</h2>
  * <p>
  * 继承 {@link AbstractMessageStorage}，数据源为 {@link SyncerEnum#STATIC_ACCESS_TOKEN}；
- * basis 在令牌状态变更或删除时推送 tokenHash，本类收到后 {@code invalidate} 对应条目。
+ * basis 推送 {@link StaticAccessTokenHash} 后对本类缓存执行 {@code invalidate}。
  * </p>
  *
  * @author alpha
@@ -56,7 +56,7 @@ import java.util.concurrent.TimeUnit;
 @Service
 @Slf4j
 @AllArgsConstructor
-public class ApiKeyCache extends AbstractMessageStorage<String, String, String> {
+public class ApiKeyCache extends AbstractMessageStorage<String, StaticAccessTokenHash, String> {
 
     private final BasisServiceClient basisServiceClient;
 
@@ -77,34 +77,32 @@ public class ApiKeyCache extends AbstractMessageStorage<String, String, String> 
     }
 
     @Override
-    public @NonNull Class<String> getValueType() {
-        return String.class;
+    public @NonNull Class<StaticAccessTokenHash> getValueType() {
+        return StaticAccessTokenHash.class;
     }
 
     @Override
-    public @NonNull String getKey(@NonNull String value) {
-        return value;
+    public @NonNull String getKey(@NonNull StaticAccessTokenHash value) {
+        return value.getTokenHash();
     }
 
     @Override
-    public void create(@NonNull String key, String value) {
-        log.info("before cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
+    public void create(@NonNull String key, StaticAccessTokenHash value) {
         delete(key);
-        log.info("after cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
     }
 
     @Override
     public void delete(@NonNull String key) {
-        log.info("before cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
+        if (Strings.isBlank(key)) {
+            return;
+        }
+
         CACHE.invalidate(key);
-        log.info("after cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
     }
 
     @Override
-    public void update(@NonNull String key, String value) {
-        log.info("before cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
+    public void update(@NonNull String key, StaticAccessTokenHash value) {
         delete(key);
-        log.info("after cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
     }
 
     @Override
