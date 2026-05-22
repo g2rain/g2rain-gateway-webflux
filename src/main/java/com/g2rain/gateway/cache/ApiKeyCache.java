@@ -1,6 +1,7 @@
 package com.g2rain.gateway.cache;
 
 
+import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.syncer.AbstractMessageStorage;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.gateway.client.BasisServiceClient;
@@ -13,6 +14,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -52,6 +54,7 @@ import java.util.concurrent.TimeUnit;
  * @since 2026/5/22
  */
 @Service
+@Slf4j
 @AllArgsConstructor
 public class ApiKeyCache extends AbstractMessageStorage<String, String, String> {
 
@@ -90,7 +93,9 @@ public class ApiKeyCache extends AbstractMessageStorage<String, String, String> 
 
     @Override
     public void delete(@NonNull String key) {
+        log.info("before cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
         CACHE.invalidate(key);
+        log.info("after cache:{}", JsonCodecFactory.instance().obj2str(CACHE));
     }
 
     @Override
