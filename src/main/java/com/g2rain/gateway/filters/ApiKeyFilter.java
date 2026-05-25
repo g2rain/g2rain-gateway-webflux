@@ -65,7 +65,9 @@ public class ApiKeyFilter implements GlobalFilter, Ordered {
 
     private final ApiKeyCache apiKeyCache;
 
-    /** 用于在上下文中填充 traceId（无活跃 Span 时生成随机 ID）。 */
+    /**
+     * 用于在上下文中填充 traceId（无活跃 Span 时生成随机 ID）。
+     */
     private final Tracer tracer;
 
     @Override
@@ -96,7 +98,7 @@ public class ApiKeyFilter implements GlobalFilter, Ordered {
             }
 
             return EdgePrincipalContextHolder.get().flatMap(principal -> {
-                applyContext(principal, result.context());
+                applyContext(principal, result.context(), credential);
                 return chain.filter(exchange);
             });
         });
@@ -105,13 +107,14 @@ public class ApiKeyFilter implements GlobalFilter, Ordered {
     /**
      * 将静态令牌会话写入边缘 Principal，并标记 API Key 鉴权已完成。
      */
-    private void applyContext(EdgePrincipalContext principal, StaticTokenContext ctx) {
+    private void applyContext(EdgePrincipalContext principal, StaticTokenContext ctx, String apiKey) {
         String traceId = Optional.ofNullable(tracer.currentSpan())
             .map(Span::context).map(TraceContext::traceId)
             .orElseGet(() ->
                 UUID.randomUUID().toString().replace("-", "")
             );
 
+        principal.setApiKey(apiKey);
         principal.setStaticTokenAuthenticated(true);
         principal.setTraceId(traceId);
         principal.setRequestId(UUID.randomUUID().toString());
