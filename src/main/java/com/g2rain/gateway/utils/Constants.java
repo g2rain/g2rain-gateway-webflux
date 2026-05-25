@@ -36,6 +36,16 @@ public final class Constants {
     public static final String AUTHORIZATION_HEADER = "Authorization";
 
     /**
+     * Authorization 中 Bearer 方案前缀（与 OpenAI 一致：{@code Bearer sk-...}）。
+     */
+    public static final String BEARER_PREFIX = "Bearer ";
+
+    /**
+     * 静态 API Key 固定总长度（含前缀与两段负载）。
+     */
+    public static final int API_KEY_LENGTH = 64;
+
+    /**
      * {@code CLIENT_PROOF_HEADER} HTTP 请求头：DPoP
      */
     public static final String CLIENT_PROOF_HEADER = "DPoP";

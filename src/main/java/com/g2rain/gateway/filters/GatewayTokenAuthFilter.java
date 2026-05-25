@@ -10,6 +10,7 @@ import com.g2rain.gateway.exception.GatewayException;
 import com.g2rain.gateway.model.context.EdgePrincipalContext;
 import com.g2rain.gateway.model.context.EdgePrincipalContextHolder;
 import com.g2rain.gateway.token.TokenKeyManager;
+import com.g2rain.gateway.utils.AuthScheme;
 import com.g2rain.gateway.utils.Constants;
 import com.g2rain.gateway.whitelist.WhiteListResolver;
 import com.nimbusds.jose.JOSEException;
@@ -34,20 +35,21 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 网关层 Token 鉴权过滤器。
+ * 网关层 Token（JWT）鉴权过滤器。
+ *
  * <p>
- * 负责验证客户端请求中的 Token JWT（通常位于 {@code Authorization} Header 中），
- * 并在验证通过后构建并注入 {@link EdgePrincipalContext} 鉴权上下文。
+ * 校验 {@code Authorization} 中的登录态 JWT（ECDSA），解析 {@link com.g2rain.common.web.TokenJWTPayload}
+ * 并写入 {@link EdgePrincipalContext}。与 {@link ApiKeyFilter} 分流：若 {@link EdgePrincipalContext#isStaticTokenAuthenticated()}
+ * 已为真，说明请求已走静态 API Key 鉴权，本过滤器直接放行。
  * </p>
- * <p>
- * 核心流程：
+ *
+ * <h2>核心流程</h2>
  * <ul>
- *     <li>检查白名单请求，若命中则跳过校验</li>
- *     <li>提取并验证 Token JWT</li>
- *     <li>调用认证服务进行 Token 验证</li>
- *     <li>构建并写入鉴权上下文</li>
+ *     <li>白名单命中 → 跳过</li>
+ *     <li>{@code staticTokenAuthenticated} → 跳过</li>
+ *     <li>提取 Bearer 凭证，校验 JWT 签名与有效期</li>
+ *     <li>填充用户、机构、应用等 Principal 字段</li>
  * </ul>
- * </p>
  *
  * @author alpha
  * @since 2025/10/6
@@ -92,23 +94,22 @@ public class GatewayTokenAuthFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        // 1. 提取 Token JWT
-        String authHeader = request.getHeaders().getFirst(Constants.AUTHORIZATION_HEADER);
-        if (Strings.isBlank(authHeader)) {
-            throw new GatewayException(GatewayErrorCode.TOKEN_INVALID, "token");
-        }
-
-        // 去掉 "Bearer "
-        if (Objects.nonNull(authHeader) && Strings.startsWith(authHeader, "Bearer ")) {
-            authHeader = authHeader.substring(7);
-        }
-
-        // 2. 验证 Token JWT
-        TokenJWTPayload payload = inspectToken(authHeader);
-
-        // 3. 构建鉴权上下文并继续过滤链
         return EdgePrincipalContextHolder.get().flatMap(context -> {
-            buildPrincipalContext(context, payload);
+            if (context.isStaticTokenAuthenticated()) {
+                return chain.filter(exchange);
+            }
+
+            String authHeader = request.getHeaders().getFirst(Constants.AUTHORIZATION_HEADER);
+            if (Strings.isBlank(authHeader)) {
+                return Mono.error(new GatewayException(GatewayErrorCode.TOKEN_INVALID, "token"));
+            }
+
+            String credential = AuthScheme.credential(authHeader);
+            if (Strings.isBlank(credential)) {
+                return Mono.error(new GatewayException(GatewayErrorCode.TOKEN_INVALID, "token"));
+            }
+
+            buildPrincipalContext(context, inspectToken(credential));
             return chain.filter(exchange);
         });
     }

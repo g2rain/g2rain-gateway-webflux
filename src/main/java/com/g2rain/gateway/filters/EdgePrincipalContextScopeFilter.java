@@ -41,8 +41,8 @@ public class EdgePrincipalContextScopeFilter implements GlobalFilter, Ordered {
             .findFirst()
             .map(Locale.LanguageRange::getRange)
             .map(Locale::forLanguageTag)
-            .map(Locale::toLanguageTag)
-            .orElse(null);
+            .orElse(Locale.getDefault())
+            .toLanguageTag();
     }
 
     @Override

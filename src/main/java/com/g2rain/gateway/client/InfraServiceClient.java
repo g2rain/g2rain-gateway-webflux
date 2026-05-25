@@ -88,10 +88,10 @@ public class InfraServiceClient {
                 if (result.isSuccess()) {
                     // 返回 TokenJWTPayload
                     return Mono.just(result.getData());
-                } else { // status != 200
-                    // 统一抛出业务异常，带错误信息
-                    return Mono.error(ExceptionConverter.of(result));
                 }
+
+                // status != 200 统一抛出业务异常，带错误信息
+                return Mono.error(ExceptionConverter.of(result));
             })
             .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
     }
