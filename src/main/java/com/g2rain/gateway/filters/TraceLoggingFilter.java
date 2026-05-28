@@ -128,11 +128,14 @@ public class TraceLoggingFilter implements GlobalFilter, Ordered {
             ServerHttpResponse response = exchange.getResponse();
 
             if (!(response instanceof CachedBodyResponse cachedResponse)) {
+                log.info("响应体大小:{}", response.getHeaders().getContentLength());
                 log.info("打印非 JSON 数据日志1");
                 return Mono.empty();
             }
 
             byte[] cachedBody = cachedResponse.getBody();
+            log.info("响应体大小:{}", Collections.isNotEmpty(cachedBody) ? cachedBody.length : response.getHeaders().getContentLength());
+
             if (Collections.isEmpty(cachedBody)) {
                 log.info("打印非 JSON 数据日志2");
                 return Mono.empty();
