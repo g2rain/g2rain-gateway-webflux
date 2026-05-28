@@ -11,6 +11,8 @@ import com.g2rain.common.web.DPoPJWTPayload;
 import com.g2rain.gateway.exception.GatewayException;
 import com.g2rain.gateway.model.context.EdgePrincipalContext;
 import com.g2rain.gateway.model.context.EdgePrincipalContextHolder;
+import com.g2rain.gateway.enums.GatewayErrorCode;
+import com.g2rain.gateway.utils.ClientPubKeyMatcher;
 import com.g2rain.gateway.utils.Constants;
 import com.g2rain.gateway.whitelist.WhiteListResolver;
 import com.nimbusds.jose.JOSEException;
@@ -137,6 +139,10 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
         DPoPJWTPayload payload = verifyPayload(request, signedJWT);
 
         return EdgePrincipalContextHolder.get().flatMap(context -> {
+            if (!ClientPubKeyMatcher.matches(context.getClientPublicKey(), signedJWT.getHeader().getJWK())) {
+                throw new GatewayException(GatewayErrorCode.TOKEN_INVALID, "token");
+            }
+
             boolean isAcdNotAuthorized = Stream
                 .ofNullable(context.getApplicationScopes())
                 .flatMap(Collection::stream)
