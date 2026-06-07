@@ -6,9 +6,11 @@ import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.common.web.PrincipalHeaders;
 import com.g2rain.gateway.components.KafkaLogSender;
-import com.g2rain.gateway.model.logger.JsonLog;
+import com.g2rain.gateway.model.context.EdgePrincipalContextHolder;
+import com.g2rain.gateway.model.event.GatewayEvent;
 import com.g2rain.gateway.model.web.CachedBodyRequest;
 import com.g2rain.gateway.model.web.CachedBodyResponse;
+import com.g2rain.gateway.utils.Constants;
 import com.g2rain.gateway.utils.ReqParamCodec;
 import com.g2rain.gateway.whitelist.WhiteListResolver;
 import lombok.AllArgsConstructor;
@@ -126,18 +128,34 @@ public class TraceLoggingFilter implements GlobalFilter, Ordered {
             ServerHttpResponse response = exchange.getResponse();
 
             if (!(response instanceof CachedBodyResponse cachedResponse)) {
+                log.info("响应体大小:{}", response.getHeaders().getContentLength());
                 log.info("打印非 JSON 数据日志1");
                 return Mono.empty();
             }
 
             byte[] cachedBody = cachedResponse.getBody();
+            log.info("响应体大小:{}", Collections.isNotEmpty(cachedBody) ? cachedBody.length : response.getHeaders().getContentLength());
+
             if (Collections.isEmpty(cachedBody)) {
                 log.info("打印非 JSON 数据日志2");
                 return Mono.empty();
             }
 
             log.info(new String(cachedBody, StandardCharsets.UTF_8));
-            return Mono.empty();
+
+            return EdgePrincipalContextHolder.get().doOnNext(ctx -> {
+                try {
+                    GatewayEvent gatewayEvent = GatewayEvent.builder()
+                        .buildHeaders(exchange)
+                        .buildPrincipal(ctx)
+                        .buildPayload(exchange, cachedBody)
+                        .build();
+
+                    kafkaLogSender.send("gateway.exchange.event", gatewayEvent);
+                } catch (Exception e) {
+                    log.warn("构建或发送网关事件失败", e);
+                }
+            }).then();
         });
     }
 
@@ -164,15 +182,15 @@ public class TraceLoggingFilter implements GlobalFilter, Ordered {
             }
 
             if (MediaType.APPLICATION_FORM_URLENCODED.isCompatibleWith(contentType)) {
-                return processFormUrlEncodedBody(cached, logMap);
+                return processFormUrlEncodedBody(exchange, cached, logMap);
             }
 
             if (MediaType.APPLICATION_JSON.isCompatibleWith(contentType)) {
-                return processJsonBody(cached, logMap);
+                return processJsonBody(exchange, cached, logMap);
             }
 
             if (MediaType.MULTIPART_FORM_DATA.isCompatibleWith(contentType)) {
-                return processMultipartBody(cached, logMap);
+                return processMultipartBody(exchange, cached, logMap);
             }
 
             return printRequest(logMap);
@@ -234,8 +252,10 @@ public class TraceLoggingFilter implements GlobalFilter, Ordered {
      * @param logMap        存储日志信息的 Map
      * @return {@link Mono} 完成信号
      */
-    private Mono<@NonNull Void> processFormUrlEncodedBody(CachedBodyRequest cachedRequest, Map<String, Object> logMap) {
-        logMap.put("表单参数", ReqParamCodec.processFormUrlEncodedBody(cachedRequest));
+    private Mono<@NonNull Void> processFormUrlEncodedBody(ServerWebExchange exchange, CachedBodyRequest cachedRequest, Map<String, Object> logMap) {
+        var formParams = ReqParamCodec.processFormUrlEncodedBody(cachedRequest);
+        exchange.getAttributes().put(Constants.REQ_BODY_ATTRIBUTE, formParams);
+        logMap.put("表单参数", formParams);
         return printRequest(logMap);
     }
 
@@ -246,8 +266,10 @@ public class TraceLoggingFilter implements GlobalFilter, Ordered {
      * @param logMap        存储日志信息的 Map
      * @return {@link Mono} 完成信号
      */
-    private Mono<@NonNull Void> processJsonBody(CachedBodyRequest cachedRequest, Map<String, Object> logMap) {
-        logMap.put("请求主体", new String(cachedRequest.asBytes(), StandardCharsets.UTF_8));
+    private Mono<@NonNull Void> processJsonBody(ServerWebExchange exchange, CachedBodyRequest cachedRequest, Map<String, Object> logMap) {
+        var body = new String(cachedRequest.asBytes(), StandardCharsets.UTF_8);
+        exchange.getAttributes().put(Constants.REQ_BODY_ATTRIBUTE, body);
+        logMap.put("请求主体", body);
         return printRequest(logMap);
     }
 
@@ -258,7 +280,7 @@ public class TraceLoggingFilter implements GlobalFilter, Ordered {
      * @param logMap        存储日志信息的 Map
      * @return {@link Mono} 完成信号
      */
-    private Mono<@NonNull Void> processMultipartBody(CachedBodyRequest cachedRequest, Map<String, Object> logMap) {
+    private Mono<@NonNull Void> processMultipartBody(ServerWebExchange exchange, CachedBodyRequest cachedRequest, Map<String, Object> logMap) {
         return new DefaultPartHttpMessageReader().read(ResolvableType.forClass(Part.class), cachedRequest, Map.of())
             .cast(Part.class)
             .collectList()
@@ -270,6 +292,7 @@ public class TraceLoggingFilter implements GlobalFilter, Ordered {
             .flatMap(multipartData -> ReqParamCodec.processMultipartBody(
                 multipartData, filePart -> Mono.just(filePart.filename())
             )).flatMap(multipartMap -> {
+                exchange.getAttributes().put(Constants.REQ_BODY_ATTRIBUTE, multipartMap);
                 logMap.put("表单参数", multipartMap);
                 return printRequest(logMap);
             });
@@ -283,7 +306,6 @@ public class TraceLoggingFilter implements GlobalFilter, Ordered {
      */
     private Mono<@NonNull Void> printRequest(Map<String, Object> logMap) {
         log.info("请求信息 - {}", JsonCodecFactory.instance().obj2str(logMap));
-        kafkaLogSender.send("logs", new JsonLog());
         return Mono.empty();
     }
 

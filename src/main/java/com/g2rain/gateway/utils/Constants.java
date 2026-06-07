@@ -36,6 +36,16 @@ public final class Constants {
     public static final String AUTHORIZATION_HEADER = "Authorization";
 
     /**
+     * Authorization 中 Bearer 方案前缀（与 OpenAI 一致：{@code Bearer sk-...}）。
+     */
+    public static final String BEARER_PREFIX = "Bearer ";
+
+    /**
+     * 静态 API Key 固定总长度（含前缀与两段负载）。
+     */
+    public static final int API_KEY_LENGTH = 64;
+
+    /**
      * {@code CLIENT_PROOF_HEADER} HTTP 请求头：DPoP
      */
     public static final String CLIENT_PROOF_HEADER = "DPoP";
@@ -52,4 +62,29 @@ public final class Constants {
     public static final String ROUTE_CONTEXT_PATH = "route.context.path";
 
     public static final String REQUEST_ID = "requestId";
+
+    /**
+     * 与 basis {@code AuthorizationStatus#ACTIVATED} 名称一致。
+     */
+    public static final String AUTHORIZATION_ACTIVATED = "ACTIVATED";
+
+    /**
+     * OpenAPI 文档默认路径
+     */
+    public static final String DOC_PATH = "/v3/api-docs";
+
+    /**
+     * 业务服务 OpenAPI 文档默认路径
+     */
+    public static final String DOC_PATH_FORMAT = "/%s" + DOC_PATH;
+
+    /**
+     * 请求参数缓存键
+     */
+    public static final String REQ_BODY_ATTRIBUTE = "g2rain.gateway.request.body";
+
+    /**
+     * 空响应结果
+     */
+    public static final String EMPTY_RSP_BODY = "{}";
 }

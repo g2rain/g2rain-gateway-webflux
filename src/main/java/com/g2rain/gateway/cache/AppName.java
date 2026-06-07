@@ -4,6 +4,7 @@ package com.g2rain.gateway.cache;
 import com.g2rain.common.syncer.AbstractMessageStorage;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.gateway.client.BasisServiceClient;
+import com.g2rain.gateway.enums.SyncerEnum;
 import com.g2rain.gateway.model.cache.AppIdName;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -19,7 +20,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * @author alpha
@@ -34,6 +37,11 @@ public class AppName extends AbstractMessageStorage<Long, AppIdName, String> {
      * 应用客户端
      */
     private final BasisServiceClient basisServiceClient;
+
+    /**
+     * 相同「未命中 id 集合」并发回源时合并为单次 Basis 批量 RPC（键为排序后的 id 列表字符串）。
+     */
+    private final ConcurrentHashMap<String, Mono<Map<String, String>>> inFlightLoads = new ConcurrentHashMap<>();
 
     /**
      * 应用名称本地缓存（网关侧）。
@@ -62,7 +70,7 @@ public class AppName extends AbstractMessageStorage<Long, AppIdName, String> {
 
     @Override
     protected @NonNull String dataSource() {
-        return "APP_NAME";
+        return SyncerEnum.APP_NAME.name();
     }
 
     @Override
@@ -126,33 +134,58 @@ public class AppName extends AbstractMessageStorage<Long, AppIdName, String> {
             return Mono.just(result);
         }
 
-        // 2) 对未命中部分走批量接口
-        return basisServiceClient.appIdNameMap(missIds)
-            .doOnError(e -> log.warn("批量查询应用名称失败, ids={}", missIds, e))
+        Set<Long> frozenMiss = Set.copyOf(missIds);
+        String batchKey = missBatchKey(frozenMiss);
+        Mono<Map<String, String>> shared = inFlightLoads.computeIfAbsent(batchKey, k -> loadMissBatch(frozenMiss, k));
+
+        return shared.map(namesForMiss -> {
+            Map<String, String> merged = new HashMap<>(result);
+            merged.putAll(namesForMiss);
+            return merged;
+        });
+    }
+
+    /**
+     * 单次批量 RPC + 写本地缓存；多订阅者共享（{@link Mono#cache()}），结束后移除 in-flight 键。
+     */
+    private Mono<Map<String, String>> loadMissBatch(Set<Long> frozenMiss, String batchKey) {
+        return basisServiceClient.appIdNameMap(frozenMiss)
+            .doOnError(e -> log.warn("批量查询应用名称失败, ids={}", frozenMiss, e))
             .onErrorResume(_ -> Mono.just(List.of()))
-            .map(data -> {
-                if (!Collections.isEmpty(data)) {
-                    // 先把接口返回的命中项写回缓存，并从 missIds 移除
-                    for (AppIdName vo : data) {
-                        if (Objects.isNull(vo) || Objects.isNull(vo.getId())) {
-                            continue;
-                        }
+            .map(data -> materializeMissBatch(frozenMiss, data))
+            .cache()
+            .doFinally(_ -> inFlightLoads.remove(batchKey));
+    }
 
-                        Long id = vo.getId();
-                        String name = Objects.toString(vo.getApplicationName(), "");
-                        appCache.put(id, name);
-                        result.put(String.valueOf(id), name);
-                        missIds.remove(id);
-                    }
+    /**
+     * 将 Basis 返回与未在结果中出现的 id 一并写入缓存与本次回源映射（含负缓存）。
+     */
+    private static Map<String, String> materializeMissBatch(Set<Long> frozenMiss, List<AppIdName> data) {
+        Set<Long> stillMissing = new HashSet<>(frozenMiss);
+        Map<String, String> namesForMiss = new HashMap<>(Math.max(16, frozenMiss.size()));
+        if (!Collections.isEmpty(data)) {
+            for (AppIdName vo : data) {
+                if (Objects.isNull(vo) || Objects.isNull(vo.getId())) {
+                    continue;
                 }
 
-                // 3) 回填缓存：接口没查到的也写入空串（负缓存），防止缓存穿透
-                for (Long id : missIds) {
-                    appCache.put(id, "");
-                    result.put(String.valueOf(id), "");
-                }
+                Long id = vo.getId();
+                String name = Objects.toString(vo.getApplicationName(), "");
+                appCache.put(id, name);
+                namesForMiss.put(String.valueOf(id), name);
+                stillMissing.remove(id);
+            }
+        }
 
-                return result;
-            });
+        for (Long id : stillMissing) {
+            appCache.put(id, "");
+            namesForMiss.put(String.valueOf(id), "");
+        }
+
+        return namesForMiss;
+    }
+
+    private static String missBatchKey(Set<Long> missIds) {
+        return missIds.stream().sorted().map(String::valueOf).collect(Collectors.joining(","));
     }
 }

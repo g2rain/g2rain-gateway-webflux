@@ -1,12 +1,12 @@
 package com.g2rain.gateway.controller;
 
-import com.g2rain.gateway.route.MemoryRouteRepository;
+import com.g2rain.gateway.client.BasisServiceClient;
+import com.g2rain.gateway.model.route.ServiceRegistryVo;
+import com.g2rain.gateway.route.GatewayRouteLoader;
 import com.g2rain.gateway.utils.Constants;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
-import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.http.MediaType;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 动态 OpenAPI 目录：数据源自 {@link com.g2rain.gateway.route.MemoryRouteRepository} 当前路由。
+ * 动态 OpenAPI 目录：数据源自 basis 服务注册（与内存路由定义由 {@link GatewayRouteLoader} 维护）。
  *
  * @author alpha
  * @since 2026/4/11
@@ -27,7 +27,10 @@ import java.util.Optional;
 @RestController
 @AllArgsConstructor
 public class OpenApiController {
-    private final MemoryRouteRepository routeRepository;
+    /**
+     * 机构客户端
+     */
+    private final BasisServiceClient basisServiceClient;
 
     /**
      * Swagger UI {@code configUrl} 所需结构（含 {@code urls} 与默认选中的 {@code urls.primaryName}）。
@@ -57,37 +60,17 @@ public class OpenApiController {
      * 返回当前动态路由推导出的文档列表；同一 context 多条路由只保留一条。
      */
     private Mono<@NonNull List<@NonNull OpenApiDocItem>> listDocs() {
-        return routeRepository.getRouteDefinitions()
+        return basisServiceClient.getServiceRegistry()
             .mapNotNull(this::toItem)
             .distinct(OpenApiDocItem::url)
             .sort(Comparator.comparing(OpenApiDocItem::name, String.CASE_INSENSITIVE_ORDER))
             .collectList();
     }
 
-    private OpenApiDocItem toItem(RouteDefinition route) {
-        return contextOf(route)
-            .map(ctx -> new OpenApiDocItem(ctx, String.format("/%s/v3/api-docs", ctx)))
+    private OpenApiDocItem toItem(ServiceRegistryVo registry) {
+        return Optional.of(registry.getRoutePrefix())
+            .map(ctx -> new OpenApiDocItem(ctx, String.format(Constants.DOC_PATH_FORMAT, ctx)))
             .orElse(null);
-    }
-
-    private Optional<String> contextOf(RouteDefinition route) {
-        Object raw = route.getMetadata().get(Constants.ROUTE_CONTEXT_PATH);
-        if (!(raw instanceof String s) || !StringUtils.hasText(s)) {
-            return Optional.empty();
-        }
-
-        String trimmed = s.trim();
-        if (trimmed.isEmpty()) {
-            return Optional.empty();
-        }
-
-        // 与 Path 谓词中 context 段一致：去掉首尾 '/'
-        String normalized = trimmed.replaceAll("^/+", "").replaceAll("/+$", "");
-        if (!StringUtils.hasText(normalized)) {
-            return Optional.empty();
-        }
-
-        return Optional.of(normalized);
     }
 
     public record OpenApiDocItem(String name, String url) {

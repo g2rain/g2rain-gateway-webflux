@@ -1,60 +1,34 @@
 /**
- * <h1>动态路由管理模块</h1>
+ * 网关动态路由包（WebFlux / Spring Cloud Gateway Reactive）。
  *
- * <p>
- * 本包提供了网关动态路由的完整实现，包括从基础服务加载路由定义、
- * 缓存到内存、路由刷新以及路由构建的功能。
- * 它是基于 Spring Cloud Gateway 的动态路由扩展模块，
- * 实现了网关在运行时加载和刷新路由配置的能力。
- * </p>
+ * <p>本包把「控制面下发的路由定义」与「数据面请求匹配」串起来：一侧负责把
+ * {@link com.g2rain.gateway.model.route.RouteDefinitionVo} 等 VO 写入 Spring Cloud Gateway 的
+ * {@link org.springframework.cloud.gateway.route.RouteDefinitionRepository} 并发布刷新事件；
+ * 另一侧用 {@link com.g2rain.gateway.matcher.MatchEngine} 维护与 SCG 谓词一致的路径索引，
+ * 在 {@link org.springframework.cloud.gateway.handler.RoutePredicateHandlerMapping}
+ * 的 {@code lookupRoute} 路径上先做粗筛，再在候选上做谓词细判，避免每次全量拉路由。</p>
  *
- * <h2>核心功能</h2>
+ * <h2>核心类型与职责</h2>
  * <ul>
- *     <li>通过 webclient 查询路由列表</li>
- *     <li>将路由缓存到内存仓库以提升性能</li>
- *     <li>提供路由刷新机制，支持运行时更新路由</li>
- *     <li>构建路由谓词（Predicates）和过滤器（Filters）</li>
- *     <li>发布路由刷新事件，通知网关更新路由</li>
+ *     <li>{@link com.g2rain.gateway.route.GatewayRouteLoader}：实现 {@code RouteDefinitionRepository}，
+ *         负责 VO→{@link org.springframework.cloud.gateway.route.RouteDefinition} 的转换、内存路由表、
+ *         与 {@link com.g2rain.gateway.route.RouteMatchHolder} 的索引同步，并在适当时机发布 {@link org.springframework.cloud.gateway.event.RefreshRoutesEvent}。</li>
+ *     <li>{@link com.g2rain.gateway.route.RouteMatchHolder}：持有以 {@link java.lang.Long} 为业务目标的
+ *         {@link com.g2rain.gateway.matcher.RuleDefinition} 与 {@link com.g2rain.gateway.matcher.MatchEngine}，
+ *         对外提供按「方法 + 路径」的响应式匹配入口。</li>
+ *     <li>{@link com.g2rain.gateway.route.IndexedRouteMapping}：继承 SCG 的 {@link org.springframework.cloud.gateway.handler.RoutePredicateHandlerMapping}，
+ *         用索引匹配替代默认全量 {@code RouteLocator} 扫描，并与运行时 {@link org.springframework.cloud.gateway.route.Route} 快照组合完成 lookup。</li>
  * </ul>
  *
- * <h2>主要类</h2>
- * <ul>
- *     <li>{@link com.g2rain.gateway.route.MemoryRouteLoader} — 动态路由加载器，负责启动时和刷新时加载路由</li>
- *     <li>{@link com.g2rain.gateway.route.MemoryRouteRepository} — 内存路由仓库，存储当前可用的路由定义</li>
- *     <li>{@link com.g2rain.gateway.client.InfraServiceClient} — 通过 webclient 查询路由</li>
- *     <li>{@link com.g2rain.gateway.model.route.RouteDefinitionVo} — 路由定义基础服务实体类，映射路由配置信息</li>
- * </ul>
- *
- * <h2>使用场景</h2>
- * <ul>
- *     <li>需要动态加载路由的网关系统</li>
- *     <li>路由定义存储在基础服务中，需要在运行时刷新路由</li>
- *     <li>希望提升路由加载性能，将路由缓存到内存</li>
- * </ul>
- *
- * <h2>执行流程</h2>
+ * <h2>典型数据流</h2>
  * <ol>
- *     <li>应用启动后，{@link com.g2rain.gateway.route.MemoryRouteLoader#customize(NettyReactiveWebServerFactory)} 自动触发加载</li>
- *     <li>{@link com.g2rain.gateway.client.InfraServiceClient} 通过 webclient 查询路由列表</li>
- *     <li>{@link com.g2rain.gateway.route.MemoryRouteRepository} 清空旧路由并加载新路由</li>
- *     <li>{@link com.g2rain.gateway.route.MemoryRouteLoader} 构建路由谓词和过滤器并保存到内存仓库</li>
- *     <li>发布 {@link org.springframework.cloud.gateway.event.RefreshRoutesEvent}，触发网关路由刷新</li>
+ *     <li>控制面变更 → {@code GatewayRouteLoader} 更新内存 {@code RouteDefinition} 与 {@code RouteMatchHolder}。</li>
+ *     <li>{@code publish()} 触发 {@code RefreshRoutesEvent} → {@code IndexedRouteMapping} 订阅并刷新 {@code Route} 快照。</li>
+ *     <li>请求进入 → {@code IndexedRouteMapping.lookupRoute} → {@code RouteMatchHolder.matchRoute} 粗筛路由 id →
+ *         对候选 {@link org.springframework.cloud.gateway.route.Route} 执行谓词 → 命中后写入 exchange 属性并校验。</li>
  * </ol>
  *
- * <h2>设计目标</h2>
- * <ul>
- *     <li>支持运行时动态路由刷新，无需重启网关</li>
- *     <li>保证路由加载的高性能和低延迟</li>
- *     <li>结构清晰，便于扩展和维护</li>
- * </ul>
- *
- * <p>
- * 典型的业务场景包括 API 网关、微服务路由管理、动态权限路由等。
- * </p>
- *
  * @author alpha
- * @since 2025/9/27
+ * @since 2026/05/07
  */
 package com.g2rain.gateway.route;
-
-import org.springframework.boot.reactor.netty.NettyReactiveWebServerFactory;

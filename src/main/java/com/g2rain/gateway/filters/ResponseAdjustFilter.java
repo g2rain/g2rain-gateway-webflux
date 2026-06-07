@@ -165,6 +165,11 @@ public class ResponseAdjustFilter implements GlobalFilter, Ordered {
                 return Mono.empty();
             }
 
+            // 如果默认值, 说明不是Result包装, 直接跳过处理
+            if (result.getStatus() == 0) {
+                return Mono.empty();
+            }
+
             // 2. 判断业务状态码, 如果状态码不是 200 → 抛业务异常
             if (!result.isSuccess()) {
                 return Mono.error(ExceptionConverter.of(result));

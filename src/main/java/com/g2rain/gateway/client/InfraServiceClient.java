@@ -4,7 +4,6 @@ package com.g2rain.gateway.client;
 import com.g2rain.common.exception.ExceptionConverter;
 import com.g2rain.common.model.Result;
 import com.g2rain.gateway.model.cache.I18nMessageVo;
-import com.g2rain.gateway.model.route.RouteDefinitionVo;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -77,48 +76,6 @@ public class InfraServiceClient {
             .build(); // 构建 WebClient 实例
     }
 
-    /**
-     * 获取 RouteDefinitionVo 集合
-     *
-     * <p>
-     * 调用流程说明：
-     * <ol>
-     *     <li>向 g2rain-infra /route_definition/list 发送 GET 请求。</li>
-     *     <li>Infra 服务返回 JSON 格式的 {@link Result}&lt;{@link List}&lt;{@link RouteDefinitionVo}&gt;&gt;。</li>
-     *     <li>WebClient 自动解析响应为 {@link Mono}&lt;{@link Result}&lt;{@link List}&lt;{@link RouteDefinitionVo}&gt;&gt;&gt;。</li>
-     *     <li>若请求失败（网络异常、响应超时），全局 WebClient 配置的重试策略会生效。</li>
-     * </ol>
-     * </p>
-     *
-     * @return {@link Mono}&lt;{@link Result}&lt;{@link List}&lt;{@link RouteDefinitionVo}&gt;&gt;&gt; 异步返回封装在 Result 中的 RouteDefinitionVo
-     * <p>
-     * 返回约定：
-     * <ul>
-     *     <li>code = 0 表示验证成功，data 为 RouteDefinitionVo</li>
-     *     <li>code != 0 表示验证失败，message 字段说明错误原因</li>
-     * </ul>
-     * </p>
-     */
-    public Mono<List<RouteDefinitionVo>> routes() {
-        return webClient.get()                          // 发起 GET 请求
-            .uri("/route_definition/list")              // 调用基础支撑服务的 route_definition/list 接口
-            .retrieve()                                 // 获取响应体
-            // 将 JSON 响应解析为 Result<RouteDefinitionVo>
-            .bodyToMono(new ParameterizedTypeReference<Result<List<RouteDefinitionVo>>>() {
-            })
-            .flatMap(result -> {
-                // status == 200
-                if (result.isSuccess()) {
-                    // 返回 TokenJWTPayload
-                    return Mono.just(result.getData());
-                } else { // status != 200
-                    // 统一抛出业务异常，带错误信息
-                    return Mono.error(ExceptionConverter.of(result));
-                }
-            })
-            .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
-    }
-
     public Mono<List<I18nMessageVo>> errorMessages() {
         return webClient.get()                          // 发起 GET 请求
             .uri("/i18n_message/list")                  // 调用基础支撑服务的 /i18n_message/list 接口
@@ -131,10 +88,10 @@ public class InfraServiceClient {
                 if (result.isSuccess()) {
                     // 返回 TokenJWTPayload
                     return Mono.just(result.getData());
-                } else { // status != 200
-                    // 统一抛出业务异常，带错误信息
-                    return Mono.error(ExceptionConverter.of(result));
                 }
+
+                // status != 200 统一抛出业务异常，带错误信息
+                return Mono.error(ExceptionConverter.of(result));
             })
             .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
     }

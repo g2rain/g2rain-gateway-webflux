@@ -11,6 +11,8 @@ import com.g2rain.common.web.DPoPJWTPayload;
 import com.g2rain.gateway.exception.GatewayException;
 import com.g2rain.gateway.model.context.EdgePrincipalContext;
 import com.g2rain.gateway.model.context.EdgePrincipalContextHolder;
+import com.g2rain.gateway.enums.GatewayErrorCode;
+import com.g2rain.gateway.utils.ClientPubKeyMatcher;
 import com.g2rain.gateway.utils.Constants;
 import com.g2rain.gateway.whitelist.WhiteListResolver;
 import com.nimbusds.jose.JOSEException;
@@ -49,16 +51,15 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
- * 网关层 DPoP 鉴权过滤器。
+ * 网关层 DPoP（Demonstrating Proof-of-Possession）鉴权过滤器。
+ *
  * <p>
- * 负责验证客户端请求中携带的 DPoP Proof（JWT 形式），包括：
- * <ul>
- *     <li>白名单跳过校验</li>
- *     <li>解析并验证 DPoP Proof JWT（头部 typ、JWK、签名）</li>
- *     <li>验证 payload 字段（iat、jti、htm、htu 等）</li>
- *     <li>构建鉴权上下文并写入 {@link EdgePrincipalContext}</li>
- * </ul>
- * 验证失败时抛出 {@link GatewayException}。
+ * 校验 {@code DPoP} 请求头中的 Proof JWT：头部 typ、JWK、签名，以及 payload 中的
+ * {@code iat}、{@code jti}、{@code htm}、{@code htu} 等字段；并将签名算法、预期 query/body 摘要
+ * 写入 {@link EdgePrincipalContext}，供 {@link SignVerificationFilter} 使用。
+ * </p>
+ * <p>
+ * 若 {@link EdgePrincipalContext#isStaticTokenAuthenticated()} 为真（已由 {@link ApiKeyFilter} 完成静态令牌鉴权），则跳过本过滤器。
  * </p>
  *
  * @author alpha
@@ -107,6 +108,16 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
+        return EdgePrincipalContextHolder.get().flatMap(context -> {
+            if (context.isStaticTokenAuthenticated()) {
+                return chain.filter(exchange);
+            }
+
+            return verifyDpop(exchange, chain, request);
+        });
+    }
+
+    private Mono<Void> verifyDpop(ServerWebExchange exchange, GatewayFilterChain chain, ServerHttpRequest request) {
         // 解析 DPoP proof
         String jwt = request.getHeaders().getFirst(Constants.CLIENT_PROOF_HEADER);
         if (Strings.isBlank(jwt)) {
@@ -128,6 +139,10 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
         DPoPJWTPayload payload = verifyPayload(request, signedJWT);
 
         return EdgePrincipalContextHolder.get().flatMap(context -> {
+            if (!ClientPubKeyMatcher.matches(context.getClientPublicKey(), signedJWT.getHeader().getJWK())) {
+                throw new GatewayException(GatewayErrorCode.TOKEN_INVALID, "token");
+            }
+
             boolean isAcdNotAuthorized = Stream
                 .ofNullable(context.getApplicationScopes())
                 .flatMap(Collection::stream)
@@ -144,10 +159,8 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
                 observation.highCardinalityKeyValue(KeyValue.of(Constants.REQUEST_ID, payload.getJti()));
             }
 
-            // 构建鉴权上下文 -> 注入上下文并继续过滤链
-            return buildPrincipalContext(context, hashAlgorithm, payload).then(chain.filter(exchange).contextWrite(ctx ->
-                EdgePrincipalContextHolder.put(ctx, context)
-            ));
+            // 构建鉴权上下文并继续过滤链
+            return buildPrincipalContext(context, hashAlgorithm, payload).then(chain.filter(exchange));
         });
     }
 
@@ -280,9 +293,10 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
 
         // 通过 micrometer 获取 traceId
         String traceId = Optional.ofNullable(tracer.currentSpan())
-            .map(Span::context)
-            .map(TraceContext::traceId)
-            .orElseGet(() -> UUID.randomUUID().toString().replace("-", ""));
+            .map(Span::context).map(TraceContext::traceId)
+            .orElseGet(() ->
+                UUID.randomUUID().toString().replace("-", "")
+            );
 
         context.setTraceId(traceId);
         context.setHashAlgorithm(hashAlgorithm);

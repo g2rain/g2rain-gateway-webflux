@@ -144,7 +144,8 @@ public class CachedBodyResponse extends ServerHttpResponseDecorator {
      */
     private boolean isJsonResponse() {
         return Optional.ofNullable(getHeaders().getContentType())
-            .map(MediaType.APPLICATION_JSON::isCompatibleWith)
-            .orElse(false);
+            .filter(MediaType.APPLICATION_JSON::isCompatibleWith)
+            .isPresent()
+            && !getHeaders().getContentDisposition().isAttachment();
     }
 }

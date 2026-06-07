@@ -28,18 +28,18 @@ import java.util.HexFormat;
 import java.util.Objects;
 
 /**
- * 全局摘要校验过滤器，用于验证请求的 query 参数和 body 内容的完整性。
+ * 全局请求摘要校验过滤器。
+ *
  * <p>
- * 过滤器逻辑：
- * <ul>
- *     <li>判断请求是否命中白名单，命中则跳过摘要校验。</li>
- *     <li>获取当前请求上下文中的摘要算法和预期参数摘要。</li>
- *     <li>对 query 参数和 body 内容进行规范化和摘要计算，并与预期摘要进行比对。</li>
- *     <li>摘要验证失败则抛出 {@link BusinessException}。</li>
- * </ul>
- * 支持的摘要算法由 {@link HashAlgorithm} 管理。
+ * 对 query 参数与请求 body 做规范化哈希，与 {@link EdgePrincipalContext} 中 DPoP 阶段写入的预期摘要比对，
+ * 用于保证请求内容在传输过程中未被篡改。依赖 {@link CachedBodyFilter} 已缓存的 body。
+ * </p>
  * <p>
- * 注意：此类只做数据完整性校验，并不进行签名认证，不能验证请求者身份。
+ * 若 {@link com.g2rain.gateway.model.context.EdgePrincipalContext#isStaticTokenAuthenticated()} 为真，则跳过：
+ * 静态 API Key 链路不使用 DPoP/客户端摘要体系。
+ * </p>
+ *
+ * <p>支持的算法见 {@link com.g2rain.gateway.enums.HashAlgorithm}。</p>
  *
  * @author alpha
  * @since 2025/10/6
@@ -83,8 +83,11 @@ public class SignVerificationFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        // 获取当前上下文的签名信息
         return EdgePrincipalContextHolder.get().flatMap(principalContext -> {
+            if (principalContext.isStaticTokenAuthenticated()) {
+                return chain.filter(exchange);
+            }
+
             String algorithm = principalContext.getHashAlgorithm();
             // hash 算法错误
             if (HashAlgorithm.isNotExist(algorithm)) {
