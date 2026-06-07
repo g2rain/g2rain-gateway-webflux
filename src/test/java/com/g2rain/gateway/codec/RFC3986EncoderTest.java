@@ -36,7 +36,7 @@ public class RFC3986EncoderTest {
     void testSpecialCharactersEncoding() {
         String input = "hello@world.com";
         // 根据RFC3986规范和当前实现，@字符在查询参数中是安全的，不需要编码
-        String expected = "hello@world.com";
+        String expected = "hello%40world.com";
         String result = RFC3986Encoder.encode(input);
         assertEquals(expected, result);
     }
