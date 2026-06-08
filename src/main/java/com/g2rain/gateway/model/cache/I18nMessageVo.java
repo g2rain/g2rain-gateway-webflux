@@ -1,7 +1,6 @@
 package com.g2rain.gateway.model.cache;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -39,8 +38,12 @@ public class I18nMessageVo {
     /**
      * 国际化用途编码
      */
-    @Schema(description = "国际化用途编码")
     private String messageUsageCode;
+
+    /**
+     * 业务标签
+     */
+    private String tag;
 
     /**
      * 语言编码,如 zh
