@@ -3,6 +3,7 @@ package com.g2rain.gateway.exception;
 
 import com.g2rain.common.exception.ErrorMessageRegistry;
 import com.g2rain.common.exception.LocalizedErrorMessage;
+import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.gateway.client.InfraServiceClient;
@@ -61,6 +62,7 @@ public class ErrorMessageStorage extends ErrorMessageRegistry {
             .block();
 
         if (Collections.isEmpty(messages)) {
+            log.warn("[ErrorMessageStorage] load finished | messageCount=0 | cache={}", describeCache());
             return;
         }
 
@@ -77,6 +79,9 @@ public class ErrorMessageStorage extends ErrorMessageRegistry {
                 _ -> new ConcurrentHashMap<>()
             ).put(locale, message.getMessageText());
         }
+
+        log.warn("[ErrorMessageStorage] load finished | messageCount={} | cache={}",
+            messages.size(), describeCache());
     }
 
     /**
@@ -90,13 +95,19 @@ public class ErrorMessageStorage extends ErrorMessageRegistry {
      */
     @Override
     public String getMessage(String errorCode, String locale) {
+        String inputLocale = locale;
         // 错误编码不存在, 直接返回
         if (Strings.isBlank(errorCode)) {
+            log.warn("[ErrorMessageStorage] getMessage | errorCode=blank | inputLocale={} | cache={}",
+                inputLocale, describeCache());
             return null;
         }
 
         Map<String, String> innerMap = MESSAGE_CACHE.get(errorCode);
         if (Collections.isEmpty(innerMap)) {
+            log.warn("[ErrorMessageStorage] getMessage | errorCode={} | inputLocale={} | resolvedLocale=n/a"
+                    + " | localeDefault={} | hit=null | errorLocales=MISSING | cache={}",
+                errorCode, inputLocale, Locale.getDefault().toLanguageTag(), describeCache());
             return null;
         }
 
@@ -107,20 +118,44 @@ public class ErrorMessageStorage extends ErrorMessageRegistry {
             raw = Locale.forLanguageTag(locale.trim().replace('_', '-'));
         }
 
-        locale = new Locale.Builder()
+        String resolvedLocale = new Locale.Builder()
             .setLanguage(raw.getLanguage())
             .setRegion(raw.getCountry())    // 无地区时要有兜底策略
             .build().toLanguageTag();       // 作为缓存内层 key
 
         // 获取语言-区域对应的错误信息
-        String result = innerMap.get(locale);
+        String result = innerMap.get(resolvedLocale);
 
         // 获取语言对应的错误信息
+        String fallbackLocale = null;
         if (Objects.isNull(result)) {
-            result = innerMap.get(raw.getLanguage());
+            fallbackLocale = raw.getLanguage();
+            result = innerMap.get(fallbackLocale);
         }
 
+        log.warn("[ErrorMessageStorage] getMessage | errorCode={} | inputLocale={} | resolvedLocale={}"
+                + " | localeDefault={} | fallbackLocale={} | hit={} | errorLocales={} | cache={}",
+            errorCode, inputLocale, resolvedLocale, Locale.getDefault().toLanguageTag(),
+            fallbackLocale, result, safeJson(innerMap), describeCache());
+
         return result;
+    }
+
+    private static String describeCache() {
+        int localeEntryCount = MESSAGE_CACHE.values().stream()
+            .mapToInt(Map::size)
+            .sum();
+        return "errorCodeCount=" + MESSAGE_CACHE.size()
+            + ", localeEntryCount=" + localeEntryCount
+            + ", snapshot=" + safeJson(MESSAGE_CACHE);
+    }
+
+    private static String safeJson(Object value) {
+        try {
+            return JsonCodecFactory.instance().obj2str(value);
+        } catch (Exception e) {
+            return "(serialize failed: " + e.getMessage() + ")";
+        }
     }
 
     @Override

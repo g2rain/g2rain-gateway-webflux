@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.webflux.error.ErrorWebExceptionHandler;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -95,6 +96,13 @@ public class GlobalErrorHandler implements ErrorWebExceptionHandler, Ordered {
         }
 
         return EdgePrincipalContextHolder.get().flatMap(context -> {
+            String requestAcceptLanguage = exchange.getRequest().getHeaders().getFirst(HttpHeaders.ACCEPT_LANGUAGE);
+            String errorCode = ex instanceof BusinessException businessException
+                ? businessException.getErrorCode()
+                : null;
+            log.warn("[GlobalErrorHandler] acceptLanguage={} | requestAcceptLanguage={} | errorCode={}",
+                context.getAcceptLanguage(), requestAcceptLanguage, errorCode);
+
             response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
             // 设置 HTTP 状态码和 Content-Type
             response.setStatusCode(HttpStatus.OK);
