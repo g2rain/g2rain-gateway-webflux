@@ -9,13 +9,12 @@ import com.g2rain.common.json.FailIgnoreFieldMixIn;
 import com.g2rain.common.json.JsonCodec;
 import com.g2rain.common.json.JsonCodecBuilder;
 import com.g2rain.common.model.Result;
-import com.g2rain.gateway.model.context.EdgePrincipalContextHolder;
+import com.g2rain.gateway.utils.Constants;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.webflux.error.ErrorWebExceptionHandler;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -95,38 +94,29 @@ public class GlobalErrorHandler implements ErrorWebExceptionHandler, Ordered {
             return Mono.error(ex);
         }
 
-        return EdgePrincipalContextHolder.get().flatMap(context -> {
-            String requestAcceptLanguage = exchange.getRequest().getHeaders().getFirst(HttpHeaders.ACCEPT_LANGUAGE);
-            String errorCode = ex instanceof BusinessException businessException
-                ? businessException.getErrorCode()
-                : null;
-            log.warn("[GlobalErrorHandler] acceptLanguage={} | requestAcceptLanguage={} | errorCode={}",
-                context.getAcceptLanguage(), requestAcceptLanguage, errorCode);
+        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        response.setStatusCode(HttpStatus.OK);
 
-            response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-            // 设置 HTTP 状态码和 Content-Type
-            response.setStatusCode(HttpStatus.OK);
-
-            String json;
-            if (ex instanceof BusinessException businessException) {
-                json = jsonSerializer.obj2str(exceptionProcessor.process(
-                    businessException, context.getAcceptLanguage()
-                ));
-            } else {
-                BusinessException wrapped = new BusinessException(
-                    SystemErrorCode.SYSTEM_INTERNAL_ERROR,
-                    ex.getMessage()
-                );
-                json = jsonSerializer.obj2str(exceptionProcessor.process(
-                    wrapped, context.getAcceptLanguage()
-                ));
-            }
-
-            DataBuffer buffer = response.bufferFactory().wrap(
-                json.getBytes(StandardCharsets.UTF_8)
+        String acceptLanguage = exchange.getAttribute(Constants.ACCEPT_LANGUAGE_ATTRIBUTE);
+        String json;
+        if (ex instanceof BusinessException businessException) {
+            json = jsonSerializer.obj2str(exceptionProcessor.process(
+                businessException, acceptLanguage
+            ));
+        } else {
+            BusinessException wrapped = new BusinessException(
+                SystemErrorCode.SYSTEM_INTERNAL_ERROR,
+                ex.getMessage()
             );
-            return response.writeWith(Mono.just(buffer));
-        });
+            json = jsonSerializer.obj2str(exceptionProcessor.process(
+                wrapped, acceptLanguage
+            ));
+        }
+
+        DataBuffer buffer = response.bufferFactory().wrap(
+            json.getBytes(StandardCharsets.UTF_8)
+        );
+        return response.writeWith(Mono.just(buffer));
     }
 
     /**
