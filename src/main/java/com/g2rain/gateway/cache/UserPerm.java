@@ -148,7 +148,7 @@ public class UserPerm extends AbstractMessageStorage<Long, Long, Long> {
                     describeAuthority(loaded.get(apiId))))
                 .doOnError(e -> log.warn("{} CHECK_LOAD_ERROR | organId={} userId={} appId={} apiId={} | overview={}",
                     LOG_PREFIX, organId, userId, appId, apiId, describeCacheOverview(), e))
-                .map(m -> m.get(apiId));
+                .flatMap(m -> Mono.justOrEmpty(m.get(apiId)));
         });
     }
 
