@@ -114,7 +114,7 @@ public class UserPerm extends AbstractMessageStorage<Long, Long, Long> {
             Mono<Map<Long, BaseAuthority>> shared = inFlightLoads.computeIfAbsent(loadKey, k ->
                 buildSharedLoadMono(organId, userId, appId, k)
             );
-            return shared.map(m -> m.get(apiId));
+            return shared.flatMap(m -> Mono.justOrEmpty(m.get(apiId)));
         });
     }
 

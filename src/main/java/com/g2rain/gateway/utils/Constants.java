@@ -84,6 +84,11 @@ public final class Constants {
     public static final String REQ_BODY_ATTRIBUTE = "g2rain.gateway.request.body";
 
     /**
+     * 请求级 Accept-Language，供 {@link com.g2rain.gateway.exception.GlobalErrorHandler} 读取。
+     */
+    public static final String ACCEPT_LANGUAGE_ATTRIBUTE = "g2rain.gateway.accept.language";
+
+    /**
      * 空响应结果
      */
     public static final String EMPTY_RSP_BODY = "{}";
