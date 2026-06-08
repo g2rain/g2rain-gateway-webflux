@@ -3,6 +3,7 @@ package com.g2rain.gateway.filters;
 
 import com.g2rain.gateway.model.context.EdgePrincipalContext;
 import com.g2rain.gateway.model.context.EdgePrincipalContextHolder;
+import com.g2rain.gateway.utils.Constants;
 import lombok.NonNull;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -18,7 +19,9 @@ import java.util.Locale;
  * 请求级 Principal 上下文作用域过滤器。
  * <p>
  * 该过滤器在网关过滤链最外层创建同一个 {@link EdgePrincipalContext}，
- * 使后续认证、转发、响应日志和全局异常处理都能读取到同一个上下文实例。
+ * 使后续认证、转发、响应日志等链路通过 Reactor Context 读取同一上下文；
+ * {@link com.g2rain.gateway.exception.GlobalErrorHandler} 另起订阅链，从
+ * {@link Constants#ACCEPT_LANGUAGE_ATTRIBUTE} 读取语言。
  * </p>
  *
  * @author alpha
@@ -30,7 +33,9 @@ public class EdgePrincipalContextScopeFilter implements GlobalFilter, Ordered {
     @Override
     public @NonNull Mono<@NonNull Void> filter(@NonNull ServerWebExchange exchange, @NonNull GatewayFilterChain chain) {
         EdgePrincipalContext context = EdgePrincipalContext.of();
-        context.setAcceptLanguage(resolveAcceptLanguage(exchange.getRequest()));
+        String acceptLanguage = resolveAcceptLanguage(exchange.getRequest());
+        context.setAcceptLanguage(acceptLanguage);
+        exchange.getAttributes().put(Constants.ACCEPT_LANGUAGE_ATTRIBUTE, acceptLanguage);
 
         return Mono.defer(() -> chain.filter(exchange))
             .contextWrite(ctx -> EdgePrincipalContextHolder.put(ctx, context));
