@@ -1,6 +1,7 @@
 package com.g2rain.gateway.cache;
 
 
+import com.g2rain.common.json.JsonCodecFactory;
 import com.g2rain.common.syncer.AbstractMessageStorage;
 import com.g2rain.common.utils.Collections;
 import com.g2rain.gateway.client.BasisServiceClient;
@@ -31,6 +32,8 @@ import java.util.concurrent.TimeUnit;
 @Service
 @AllArgsConstructor
 public class UserPerm extends AbstractMessageStorage<Long, Long, Long> {
+    private static final String LOG_PREFIX = "[UserPerm]";
+
     private final BasisServiceClient basisServiceClient;
 
     /**
@@ -68,16 +71,23 @@ public class UserPerm extends AbstractMessageStorage<Long, Long, Long> {
 
     @Override
     protected void create(@NonNull Long key, Long value) {
+        log.info("{} SYNC_CREATE | dataSource={} | key(organId)={} | value={} | action=invalidateOrgan | before={}",
+            LOG_PREFIX, dataSource(), key, value, describeOrganCache(key));
         delete(key);
     }
 
     @Override
     protected void delete(@NonNull Long key) {
+        String before = describeOrganCache(key);
         USER_API_PERMISSIONS.invalidate(key);
+        log.info("{} SYNC_INVALIDATE | dataSource={} | key(organId)={} | before={} | after={} | overview={}",
+            LOG_PREFIX, dataSource(), key, before, describeOrganCache(key), describeCacheOverview());
     }
 
     @Override
     protected void update(@NonNull Long key, Long value) {
+        log.info("{} SYNC_UPDATE | dataSource={} | key(organId)={} | value={} | action=invalidateOrgan | before={}",
+            LOG_PREFIX, dataSource(), key, value, describeOrganCache(key));
         delete(key);
     }
 
@@ -101,20 +111,44 @@ public class UserPerm extends AbstractMessageStorage<Long, Long, Long> {
      */
     public Mono<BaseAuthority> getApiPermission(Long organId, Long userId, Long appId, Long apiId) {
         if (Objects.isNull(organId) || Objects.isNull(userId) || Objects.isNull(appId) || Objects.isNull(apiId)) {
+            log.warn("{} CHECK_REJECT | organId={} userId={} appId={} apiId={} | reason=illegalArgument",
+                LOG_PREFIX, organId, userId, appId, apiId);
             return Mono.empty();
         }
+
+        log.info("{} CHECK_START | organId={} userId={} appId={} apiId={} | overview={} | organCache={} | appCache={}",
+            LOG_PREFIX, organId, userId, appId, apiId,
+            describeCacheOverview(), describeOrganCache(organId), describeAppPerms(organId, userId, appId));
 
         return Mono.defer(() -> {
             Map<Long, BaseAuthority> snapshot = getCachedSnapshot(organId, userId, appId);
             if (Objects.nonNull(snapshot)) {
-                return Mono.justOrEmpty(snapshot.get(apiId));
+                BaseAuthority hit = snapshot.get(apiId);
+                log.info("{} CHECK_CACHE_HIT | organId={} userId={} appId={} apiId={} | appCache={} | result={}",
+                    LOG_PREFIX, organId, userId, appId, apiId,
+                    describeAppPerms(organId, userId, appId), describeAuthority(hit));
+                return Mono.justOrEmpty(hit);
             }
 
             LoadKey loadKey = new LoadKey(organId, userId, appId);
-            Mono<Map<Long, BaseAuthority>> shared = inFlightLoads.computeIfAbsent(loadKey, k ->
-                buildSharedLoadMono(organId, userId, appId, k)
-            );
-            return shared.map(m -> m.get(apiId));
+            boolean reused = inFlightLoads.containsKey(loadKey);
+            log.info("{} CHECK_CACHE_MISS | organId={} userId={} appId={} apiId={} | inFlightReuse={} | overview={}",
+                LOG_PREFIX, organId, userId, appId, apiId, reused, describeCacheOverview());
+
+            Mono<Map<Long, BaseAuthority>> shared = inFlightLoads.computeIfAbsent(loadKey, k -> {
+                log.info("{} LOAD_REGISTER | loadKey={} | organCacheBefore={} | overview={}",
+                    LOG_PREFIX, k, describeOrganCache(organId), describeCacheOverview());
+                return buildSharedLoadMono(organId, userId, appId, k);
+            });
+
+            return shared
+                .doOnNext(loaded -> log.info("{} CHECK_LOADED | organId={} userId={} appId={} apiId={} | loaded={} | appCacheAfter={} | result={}",
+                    LOG_PREFIX, organId, userId, appId, apiId,
+                    describeAuthorityMap(loaded), describeAppPerms(organId, userId, appId),
+                    describeAuthority(loaded.get(apiId))))
+                .doOnError(e -> log.warn("{} CHECK_LOAD_ERROR | organId={} userId={} appId={} apiId={} | overview={}",
+                    LOG_PREFIX, organId, userId, appId, apiId, describeCacheOverview(), e))
+                .map(m -> m.get(apiId));
         });
     }
 
@@ -122,12 +156,28 @@ public class UserPerm extends AbstractMessageStorage<Long, Long, Long> {
      * 构造「单次 RPC + 单次写缓存」的共享 Mono，并对多订阅者去重上游（{@link Mono#cache()}）。
      */
     private Mono<Map<Long, BaseAuthority>> buildSharedLoadMono(Long organId, Long userId, Long appId, LoadKey loadKey) {
+        log.info("{} LOAD_START | loadKey={} | organCacheBefore={}",
+            LOG_PREFIX, loadKey, describeOrganCache(organId));
+
         return basisServiceClient.getApiPermissions(userId, appId)
             .defaultIfEmpty(List.of())
+            .doOnNext(rows -> log.info("{} LOAD_BASIS_RESPONSE | loadKey={} | rowCount={} | rows={}",
+                LOG_PREFIX, loadKey, rows.size(), describeAuthorityRows(rows)))
             .map(UserPerm::buildAuthorityMap)
-            .doOnNext(loaded -> mergeAppPermissions(organId, userId, appId, loaded))
+            .doOnNext(loaded -> {
+                log.info("{} MERGE_BEFORE | loadKey={} | loaded={} | organCache={}",
+                    LOG_PREFIX, loadKey, describeAuthorityMap(loaded), describeOrganCache(organId));
+                mergeAppPermissions(organId, userId, appId, loaded);
+                log.info("{} MERGE_AFTER | loadKey={} | organCache={} | appCache={} | overview={}",
+                    LOG_PREFIX, loadKey, describeOrganCache(organId),
+                    describeAppPerms(organId, userId, appId), describeCacheOverview());
+            })
             .cache()
-            .doFinally(_ -> inFlightLoads.remove(loadKey));
+            .doFinally(signal -> {
+                inFlightLoads.remove(loadKey);
+                log.info("{} LOAD_FINISH | loadKey={} | signal={} | overview={}",
+                    LOG_PREFIX, loadKey, signal, describeCacheOverview());
+            });
     }
 
     private static Map<Long, BaseAuthority> buildAuthorityMap(List<BaseAuthorityApiVo> rows) {
@@ -162,6 +212,7 @@ public class UserPerm extends AbstractMessageStorage<Long, Long, Long> {
     @SuppressWarnings("ConstantConditions")
     private static Map<Long, BaseAuthority> getCachedSnapshot(Long organId, Long userId, Long appId) {
         var userPerms = USER_API_PERMISSIONS.getIfPresent(organId);
+
         if (Objects.isNull(userPerms)) {
             return null;
         }
@@ -172,6 +223,56 @@ public class UserPerm extends AbstractMessageStorage<Long, Long, Long> {
         }
 
         return appPerms.get(appId);
+    }
+
+    private String describeCacheOverview() {
+        return "organCount=" + USER_API_PERMISSIONS.asMap().size()
+            + ", inFlight=" + inFlightLoads.keySet();
+    }
+
+    private static String describeOrganCache(Long organId) {
+        var organ = USER_API_PERMISSIONS.getIfPresent(organId);
+        if (Objects.isNull(organ)) {
+            return "organId=" + organId + " MISSING";
+        }
+        return safeJson("organId=" + organId, organ);
+    }
+
+    private static String describeAppPerms(Long organId, Long userId, Long appId) {
+        Map<Long, BaseAuthority> snapshot = getCachedSnapshot(organId, userId, appId);
+        if (Objects.isNull(snapshot)) {
+            return "organId=" + organId + " userId=" + userId + " appId=" + appId + " NOT_LOADED";
+        }
+        return safeJson("organId=" + organId + " userId=" + userId + " appId=" + appId, snapshot);
+    }
+
+    private static String describeAuthorityMap(Map<Long, BaseAuthority> map) {
+        if (Collections.isEmpty(map)) {
+            return "EMPTY";
+        }
+        return safeJson("size=" + map.size(), map);
+    }
+
+    private static String describeAuthorityRows(List<BaseAuthorityApiVo> rows) {
+        if (Collections.isEmpty(rows)) {
+            return "EMPTY";
+        }
+        return safeJson("size=" + rows.size(), rows);
+    }
+
+    private static String describeAuthority(BaseAuthority authority) {
+        if (Objects.isNull(authority)) {
+            return "MISSING";
+        }
+        return "id=" + authority.getId() + ",status=" + authority.getStatus();
+    }
+
+    private static String safeJson(String label, Object value) {
+        try {
+            return label + " " + JsonCodecFactory.instance().obj2str(value);
+        } catch (Exception e) {
+            return label + " (serialize failed: " + e.getMessage() + ")";
+        }
     }
 
     private static BaseAuthority toBaseAuthority(BaseAuthorityApiVo vo) {
