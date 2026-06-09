@@ -83,7 +83,8 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
             });
         }
 
-        return userPerm.getApiPermission(context.getOrganId(), context.getUserId(), applicationId, apiId)
+        return userPerm.getApiPermission(context.getOrganId(), context.getUserId(), context.getRoleIds(),
+                applicationId, apiId)
             .switchIfEmpty(Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId)))
             .flatMap(userApiPermission -> {
                 if (Strings.equals(Constants.AUTHORIZATION_ACTIVATED, userApiPermission.getStatus())) {

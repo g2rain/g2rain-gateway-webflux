@@ -154,16 +154,24 @@ public class BasisServiceClient {
     /**
      * 用户在指定应用下的接口权限列表。
      */
-    public Mono<List<BaseAuthorityApiVo>> getApiPermissions(Long userId, Long applicationId) {
-        if (Objects.isNull(userId) || Objects.isNull(applicationId)) {
+    public Mono<List<BaseAuthorityApiVo>> getApiPermissions(Long userId, List<Long> roleIds, Long applicationId) {
+        if (Objects.isNull(applicationId)) {
+            return Mono.just(Collections.emptyList());
+        }
+        if (com.g2rain.common.utils.Collections.isEmpty(roleIds) && Objects.isNull(userId)) {
             return Mono.just(Collections.emptyList());
         }
 
         return webClient.get()
-            .uri(uriBuilder -> uriBuilder.path("/authority/apis")
-                .queryParam("userId", userId)
-                .queryParam("applicationId", applicationId)
-                .build())
+            .uri(uriBuilder -> {
+                uriBuilder.path("/authority/apis").queryParam("applicationId", applicationId);
+                if (com.g2rain.common.utils.Collections.isNotEmpty(roleIds)) {
+                    roleIds.forEach(roleId -> uriBuilder.queryParam("roleIds", roleId));
+                } else {
+                    uriBuilder.queryParam("userId", userId);
+                }
+                return uriBuilder.build();
+            })
             .retrieve()
             .bodyToMono(new ParameterizedTypeReference<Result<List<BaseAuthorityApiVo>>>() {
             })

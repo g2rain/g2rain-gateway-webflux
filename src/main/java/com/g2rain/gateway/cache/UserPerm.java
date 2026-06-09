@@ -94,12 +94,13 @@ public class UserPerm extends AbstractMessageStorage<Long, Long, Long> {
      * {@link BasisServiceClient#getApiPermissions} 与一次缓存回填；完成后从 in-flight 表移除，便于后续失效再拉。</p>
      *
      * @param organId 机构 id
-     * @param userId  用户 id
+     * @param userId  用户 id（缓存维度）
+     * @param roleIds 角色 id 集合；非空时回源优先按角色查询
      * @param appId   应用 id
      * @param apiId   接口（路由）id
      * @return 有权限记录时发出该项；无记录或参数非法时 {@link Mono#empty()}
      */
-    public Mono<BaseAuthority> getApiPermission(Long organId, Long userId, Long appId, Long apiId) {
+    public Mono<BaseAuthority> getApiPermission(Long organId, Long userId, List<Long> roleIds, Long appId, Long apiId) {
         if (Objects.isNull(organId) || Objects.isNull(userId) || Objects.isNull(appId) || Objects.isNull(apiId)) {
             return Mono.empty();
         }
@@ -112,7 +113,7 @@ public class UserPerm extends AbstractMessageStorage<Long, Long, Long> {
 
             LoadKey loadKey = new LoadKey(organId, userId, appId);
             Mono<Map<Long, BaseAuthority>> shared = inFlightLoads.computeIfAbsent(loadKey, k ->
-                buildSharedLoadMono(organId, userId, appId, k)
+                buildSharedLoadMono(organId, userId, roleIds, appId, k)
             );
             return shared.map(m -> m.get(apiId));
         });
@@ -121,8 +122,9 @@ public class UserPerm extends AbstractMessageStorage<Long, Long, Long> {
     /**
      * 构造「单次 RPC + 单次写缓存」的共享 Mono，并对多订阅者去重上游（{@link Mono#cache()}）。
      */
-    private Mono<Map<Long, BaseAuthority>> buildSharedLoadMono(Long organId, Long userId, Long appId, LoadKey loadKey) {
-        return basisServiceClient.getApiPermissions(userId, appId)
+    private Mono<Map<Long, BaseAuthority>> buildSharedLoadMono(Long organId, Long userId, List<Long> roleIds,
+                                                              Long appId, LoadKey loadKey) {
+        return basisServiceClient.getApiPermissions(userId, roleIds, appId)
             .defaultIfEmpty(List.of())
             .map(UserPerm::buildAuthorityMap)
             .doOnNext(loaded -> mergeAppPermissions(organId, userId, appId, loaded))
