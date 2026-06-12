@@ -158,18 +158,21 @@ public class BasisServiceClient {
         if (Objects.isNull(applicationId)) {
             return Mono.just(Collections.emptyList());
         }
+
         if (com.g2rain.common.utils.Collections.isEmpty(roleIds) && Objects.isNull(userId)) {
             return Mono.just(Collections.emptyList());
         }
 
-        return webClient.get()
-            .uri(uriBuilder -> {
+        return webClient.get().uri(uriBuilder -> {
                 uriBuilder.path("/authority/apis").queryParam("applicationId", applicationId);
-                if (com.g2rain.common.utils.Collections.isNotEmpty(roleIds)) {
-                    roleIds.forEach(roleId -> uriBuilder.queryParam("roleIds", roleId));
-                } else {
+                if (Objects.nonNull(userId)) {
                     uriBuilder.queryParam("userId", userId);
                 }
+
+                if (com.g2rain.common.utils.Collections.isNotEmpty(roleIds)) {
+                    roleIds.forEach(roleId -> uriBuilder.queryParam("roleIds", roleId));
+                }
+
                 return uriBuilder.build();
             })
             .retrieve()
