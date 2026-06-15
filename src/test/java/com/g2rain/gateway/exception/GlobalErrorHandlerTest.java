@@ -4,8 +4,7 @@ import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.exception.ExceptionProcessor;
 import com.g2rain.common.exception.SystemErrorCode;
 import com.g2rain.common.model.Result;
-import com.g2rain.gateway.model.context.EdgePrincipalContext;
-import com.g2rain.gateway.model.context.EdgePrincipalContextHolder;
+import com.g2rain.gateway.utils.Constants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -51,6 +50,7 @@ public class GlobalErrorHandlerTest {
         // 准备测试数据
         MockServerHttpRequest request = MockServerHttpRequest.get("/test").build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
+        exchange.getAttributes().put(Constants.ACCEPT_LANGUAGE_ATTRIBUTE, "zh-CN");
 
         BusinessException exception = new BusinessException(SystemErrorCode.PARAM_REQUIRED, "testParam");
 
@@ -58,13 +58,8 @@ public class GlobalErrorHandlerTest {
         Result<Void> result = Result.error(String.valueOf(SystemErrorCode.PARAM_REQUIRED.code()), "参数不允许为空");
         when(exceptionProcessor.process(any(BusinessException.class), any())).thenReturn(result);
 
-        // 创建并配置上下文
-        EdgePrincipalContext context = new EdgePrincipalContext();
-        context.setAcceptLanguage("zh-CN");
-
         // 执行处理
-        Mono<Void> monoResult = globalErrorHandler.handle(exchange, exception)
-                .contextWrite(ctx -> EdgePrincipalContextHolder.put(ctx, context));
+        Mono<Void> monoResult = globalErrorHandler.handle(exchange, exception);
 
         // 验证结果（由于是异步操作，这里主要验证不抛出异常）
         assertDoesNotThrow(() -> monoResult.block());
@@ -83,6 +78,7 @@ public class GlobalErrorHandlerTest {
         // 准备测试数据
         MockServerHttpRequest request = MockServerHttpRequest.get("/test").build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
+        exchange.getAttributes().put(Constants.ACCEPT_LANGUAGE_ATTRIBUTE, "zh-CN");
 
         Exception exception = new RuntimeException("普通异常");
 
@@ -90,13 +86,8 @@ public class GlobalErrorHandlerTest {
         Result<Void> result = Result.error("500", "系统内部错误");
         when(exceptionProcessor.process(any(BusinessException.class), any())).thenReturn(result);
 
-        // 创建并配置上下文
-        EdgePrincipalContext context = new EdgePrincipalContext();
-        context.setAcceptLanguage("zh-CN");
-
         // 执行处理
-        Mono<Void> monoResult = globalErrorHandler.handle(exchange, exception)
-                .contextWrite(ctx -> EdgePrincipalContextHolder.put(ctx, context));
+        Mono<Void> monoResult = globalErrorHandler.handle(exchange, exception);
 
         // 验证结果
         assertDoesNotThrow(() -> monoResult.block());
@@ -119,16 +110,12 @@ public class GlobalErrorHandlerTest {
         // 模拟已提交的响应
         exchange.getResponse().setStatusCode(HttpStatus.OK);
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        exchange.getResponse().setComplete().block();
 
         Exception exception = new RuntimeException("异常");
 
-        // 创建并配置上下文
-        EdgePrincipalContext context = new EdgePrincipalContext();
-        context.setAcceptLanguage("zh-CN");
-        
         // 执行处理
-        Mono<Void> monoResult = globalErrorHandler.handle(exchange, exception)
-                .contextWrite(ctx -> EdgePrincipalContextHolder.put(ctx, context));
+        Mono<Void> monoResult = globalErrorHandler.handle(exchange, exception);
 
         // 验证结果应该抛出异常，因为响应已提交
         assertThrows(RuntimeException.class, () -> monoResult.block());

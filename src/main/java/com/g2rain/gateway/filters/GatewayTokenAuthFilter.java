@@ -171,6 +171,7 @@ public class GatewayTokenAuthFilter implements GlobalFilter, Ordered {
         context.setAdminCompany(tokenPayload.isAdminCompany());
         context.setApplicationScopes(tokenPayload.getApplicationScopes());
         context.setClientPublicKey(tokenPayload.getClientPublicKey());
+        context.setRoleIds(tokenPayload.getRoleIds());
     }
 
     /**

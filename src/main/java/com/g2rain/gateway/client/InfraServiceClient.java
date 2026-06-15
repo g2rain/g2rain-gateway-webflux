@@ -78,7 +78,9 @@ public class InfraServiceClient {
 
     public Mono<List<I18nMessageVo>> errorMessages() {
         return webClient.get()                          // 发起 GET 请求
-            .uri("/i18n_message/list")                  // 调用基础支撑服务的 /i18n_message/list 接口
+            .uri(uriBuilder -> uriBuilder.path("/i18n_message/list")
+                .queryParam("messageUsageCode", "ERROR_CODE")
+                .build())
             .retrieve()                                 // 获取响应体
             // 将 JSON 响应解析为 Result<List<I18nMessageVo>>
             .bodyToMono(new ParameterizedTypeReference<Result<List<I18nMessageVo>>>() {
