@@ -1,0 +1,137 @@
+schemaVersion: 1
+name: g2rain-gateway-webflux
+family: backend-foundation-service
+implementationType: webflux
+role: G2rain 响应式统一入口网关
+version: 1.0.0
+license: Apache-2.0
+
+architectureBaseline:
+  repository: https://github.com/g2rain/g2rain
+  ref: feature/g2rain-architectur-init
+  profile: docs/architecture/profiles/gateway-service
+  version: 1.0.0-draft
+  status: pilot
+  centralProfileAvailable: true
+  centralCatalogStatus: pilot
+  targetVersion: 1.0.0
+  targetRef: architecture-v1.3.0
+  adoptionGuide: docs/architecture/local-baseline.md
+  deviations: docs/architecture/deviations.md
+
+ownership:
+  owns:
+    - 动态路由装载、内存路由仓库、匹配索引及刷新事件
+    - API Key、JWT、DPoP、API 权限和请求摘要校验的入口过滤器编排
+    - 经验证的主体上下文向下游服务透传
+    - 统一错误响应、响应字段调整和 OpenAPI 文档目录聚合
+    - 网关侧路由、权限、名称与错误消息缓存的同步消费
+  excludes:
+    - IAM 的登录、授权、Token 签发和会话事实
+    - Basis 的应用、资源、权限、用户、机构、静态访问令牌和服务注册主数据
+    - Infra 的国际化错误消息主数据
+    - 下游领域服务的业务规则、持久化、租户和数据级授权
+
+toolchain:
+  java: "25+"
+  maven: "3.9+"
+  springBoot: 4.0.5
+  springCloud: 2025.1.1
+  springCloudAlibaba: 2025.1.0.0
+  packaging: executable-jar
+
+runtime:
+  mainClass: com.g2rain.gateway.Application
+  serviceName: g2rain-gateway
+  defaultPort: 8083
+  defaultProfile: dev
+  routeRepository: in-memory
+  routeControlPlane: g2rain-basis
+  discoveryAndConfig: Nacos
+  syncBinder: Redis
+  optionalLogSink: Kafka
+
+publicEndpoints:
+  - method: GET
+    path: /swagger-ui-config
+    purpose: 聚合 Basis 服务注册信息形成 Swagger UI 文档目录
+  - method: GET
+    path: /actuator/health
+    purpose: Spring Boot 健康检查
+  - method: GET
+    path: /actuator/info
+    purpose: Spring Boot 应用信息
+
+filterChain:
+  - EdgePrincipalContextScopeFilter:+0
+  - CachedBodyFilter:+100
+  - TraceLoggingFilter:+200
+  - ApiKeyFilter:+290
+  - GatewayTokenAuthFilter:+300
+  - GatewayDPoPAuthFilter:+400
+  - ApiPermissionFilter:+500
+  - SignVerificationFilter:+600
+  - PrincipalForwardFilter:+700
+  - ResponseAdjustFilter:+800
+
+collaborators:
+  - repository: g2rain/g2rain-basis
+    role: 路由、服务注册、权限、名称映射和静态访问令牌上下文
+  - repository: g2rain/g2rain-infra
+    role: 国际化错误消息
+  - repository: g2rain/g2rain-iam
+    role: JWT、DPoP 与客户端认证契约的身份来源
+  - repository: g2rain/g2rain-syncer
+    role: 路由、权限和缓存变更消息
+  - repository: g2rain/g2rain-common
+    role: 统一结果、异常、Token 载荷、主体头和同步抽象
+
+commands:
+  test: mvn test
+  package: mvn clean package
+  run: mvn spring-boot:run
+  quality:
+    - mvn checkstyle:check
+    - mvn pmd:check
+    - mvn spotbugs:check
+  image: mvn clean compile jib:dockerBuild -DskipTests=true
+  imageScript: ./build.sh <tag>
+
+configuration:
+  file: src/main/resources/application.yml
+  importantKeys:
+    - SERVER_PORT
+    - SPRING_PROFILES_ACTIVE
+    - NACOS_SERVER_ADDR
+    - SPRING_CLOUD_NACOS_DISCOVERY_USERNAME
+    - SPRING_CLOUD_NACOS_DISCOVERY_PASSWORD
+    - SPRING_CLOUD_NACOS_CONFIG_USERNAME
+    - SPRING_CLOUD_NACOS_CONFIG_PASSWORD
+    - SPRING_KAFKA_ENABLED
+    - SPRING_KAFKA_BOOTSTRAP_SERVERS
+    - gateway-white-list
+    - token
+
+documentation:
+  index: docs/index.md
+  architecture: docs/architecture/overview.md
+  runtimeFlows: docs/architecture/runtime-flows.md
+  security: docs/security/security-boundaries.md
+  api: docs/api/gateway-contracts.md
+  requirements: docs/requirements/README.md
+  decisions: docs/decisions/README.md
+
+validation:
+  reviewedAt: "2026-09-06"
+  command: mvn test
+  status: test-passed
+  testsRun: 121
+  failures: 0
+  errors: 0
+  skipped: 0
+  enforcer: passed
+  coverageReport: skipped-missing-execution-data
+  unverified:
+    - Nacos、Basis、Infra、Redis binder 与真实下游服务端到端联调
+    - Dockerfile 与 Jib 镜像构建及容器启动
+    - Checkstyle、PMD 和 SpotBugs 独立目标
