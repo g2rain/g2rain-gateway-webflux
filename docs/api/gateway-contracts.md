@@ -23,6 +23,14 @@
 
 `PrincipalForwardFilter` 在认证后构造下游主体头，并移除 `Authorization`、`DPoP` 等敏感认证头。下游只能在受控网络和明确网关信任边界内接受这些主体头，且仍需执行领域和数据级授权。
 
+| SessionType | 典型主体头 | 入口注意 |
+| --- | --- | --- |
+| `USER` | `X-USER-ID`、`X-ORGAN-ID`、… | DPoP + 摘要 + `UserPerm` |
+| `PASSPORT` | `X-PASSPORT-ID`、… | DPoP + 摘要 + `DefaultPerm` |
+| `MEMBER` | `X-MEMBER-ID`、`X-ORGAN-ID`、`X-SESSION-TYPE` | **跳过** DPoP/摘要；`MemberPerm(organId)`；不得写 `X-USER-ID` |
+
+专题设计：[MEMBER 会话入口处理](../design/member-session-gateway.md)。
+
 ## 控制面依赖
 
 Basis 提供路由定义、服务注册、应用 API、Passport/User 权限、名称映射和静态访问令牌上下文；Infra 提供错误消息。上述路径是内部协作契约，变更需同步数据所有者和网关测试。

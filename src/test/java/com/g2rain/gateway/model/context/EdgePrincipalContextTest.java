@@ -60,11 +60,17 @@ public class EdgePrincipalContextTest {
         edgePrincipalContext.setUserId(123L);
         assertEquals(123L, edgePrincipalContext.getUserId());
 
+        edgePrincipalContext.setMemberId(9001L);
+        assertEquals(9001L, edgePrincipalContext.getMemberId());
+
         edgePrincipalContext.setOrganType(OrganType.TENANT);
         assertEquals(OrganType.TENANT, edgePrincipalContext.getOrganType());
 
         edgePrincipalContext.setSessionType(SessionType.USER);
         assertEquals(SessionType.USER, edgePrincipalContext.getSessionType());
+
+        edgePrincipalContext.setSessionType(SessionType.MEMBER);
+        assertEquals(SessionType.MEMBER, edgePrincipalContext.getSessionType());
     }
 
     @Test
@@ -73,6 +79,9 @@ public class EdgePrincipalContextTest {
         edgePrincipalContext.setUserId(123L);
         String value = edgePrincipalContext.getValue(PrincipalHeaders.USER_ID);
         assertEquals("123", value);
+
+        edgePrincipalContext.setMemberId(9001L);
+        assertEquals("9001", edgePrincipalContext.getValue(PrincipalHeaders.MEMBER_ID));
     }
 
     @Test
@@ -80,5 +89,8 @@ public class EdgePrincipalContextTest {
     void testSetValue() {
         edgePrincipalContext.setValue(PrincipalHeaders.USER_ID, "123");
         assertEquals(123L, edgePrincipalContext.getUserId());
+
+        edgePrincipalContext.setValue(PrincipalHeaders.MEMBER_ID, "9001");
+        assertEquals(9001L, edgePrincipalContext.getMemberId());
     }
 }

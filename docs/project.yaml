@@ -118,6 +118,9 @@ documentation:
   runtimeFlows: docs/architecture/runtime-flows.md
   security: docs/security/security-boundaries.md
   api: docs/api/gateway-contracts.md
+  designs:
+    - docs/design/member-session-gateway.md
+    - docs/design/member-api-permission-upgrade.md
   requirements: docs/requirements/README.md
   decisions: docs/decisions/README.md
 
@@ -135,3 +138,11 @@ validation:
     - Nacos、Basis、Infra、Redis binder 与真实下游服务端到端联调
     - Dockerfile 与 Jib 镜像构建及容器启动
     - Checkstyle、PMD 和 SpotBugs 独立目标
+
+aiCoding:
+  instructionEntry: AGENTS.md
+  activeRequirement: docs/design/member-api-permission-upgrade.md
+  validation:
+    - 读取设计文档、源码、配置与 Git Diff
+    - 执行 mvn test
+    - 报告未验证事项和剩余风险

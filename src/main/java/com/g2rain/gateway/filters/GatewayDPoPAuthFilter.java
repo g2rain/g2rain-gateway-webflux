@@ -1,6 +1,7 @@
 package com.g2rain.gateway.filters;
 
 
+import com.g2rain.common.enums.SessionType;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.exception.SystemErrorCode;
 import com.g2rain.common.utils.Collections;
@@ -60,6 +61,7 @@ import java.util.stream.Stream;
  * </p>
  * <p>
  * 若 {@link EdgePrincipalContext#isStaticTokenAuthenticated()} 为真（已由 {@link ApiKeyFilter} 完成静态令牌鉴权），则跳过本过滤器。
+ * {@link SessionType#MEMBER} 会话由服务端客服持 Bearer Token 调用，不绑定 DPoP，同样跳过。
  * </p>
  *
  * @author alpha
@@ -109,7 +111,7 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
         }
 
         return EdgePrincipalContextHolder.get().flatMap(context -> {
-            if (context.isStaticTokenAuthenticated()) {
+            if (context.isStaticTokenAuthenticated() || SessionType.isMember(context.getSessionType())) {
                 return chain.filter(exchange);
             }
 

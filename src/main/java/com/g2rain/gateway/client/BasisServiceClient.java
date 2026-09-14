@@ -10,6 +10,7 @@ import com.g2rain.gateway.model.cache.OrganIdName;
 import com.g2rain.gateway.model.route.BaseAuthorityApiVo;
 import com.g2rain.gateway.model.route.RouteDefinitionVo;
 import com.g2rain.gateway.model.route.ServiceRegistryVo;
+import com.g2rain.gateway.model.route.SessionApiPermissionVo;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -203,6 +204,29 @@ public class BasisServiceClient {
                 // status != 200 统一抛出业务异常，带错误信息
                 return Mono.error(ExceptionConverter.of(result));
             })
+            .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
+    }
+
+    /**
+     * 按会话类型与机构查询入口 API 权限快照（MEMBER 必填 organId）。
+     */
+    public Mono<SessionApiPermissionVo> getSessionApiPermissions(String sessionType, Long organId) {
+        if (Strings.isBlank(sessionType) || Objects.isNull(organId) || organId <= 0) {
+            return Mono.error(new IllegalArgumentException("sessionType/organId"));
+        }
+
+        return webClient.get()
+            .uri(uriBuilder -> uriBuilder.path("/authority/session_api_permissions")
+                .queryParam("sessionType", sessionType)
+                .queryParam("organId", organId)
+                .build())
+            .retrieve()
+            .bodyToMono(new ParameterizedTypeReference<Result<SessionApiPermissionVo>>() {
+            })
+            .flatMap(result -> result.isSuccess()
+                ? Mono.justOrEmpty(result.getData())
+                : Mono.error(ExceptionConverter.of(result)))
+            .switchIfEmpty(Mono.error(new IllegalStateException("empty session api permissions")))
             .onErrorMap(ExceptionConverter::findBusinessExceptionOrDefault);
     }
 

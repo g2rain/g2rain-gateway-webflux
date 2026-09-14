@@ -1,14 +1,19 @@
 package com.g2rain.gateway.filters;
 
+import com.g2rain.common.enums.SessionType;
+import com.g2rain.common.web.PrincipalHeaders;
+import com.g2rain.gateway.model.context.EdgePrincipalContext;
+import com.g2rain.gateway.model.context.EdgePrincipalContextHolder;
 import com.g2rain.gateway.whitelist.WhiteListResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.core.Ordered;
-import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
 import org.springframework.web.server.ServerWebExchange;
@@ -16,7 +21,7 @@ import reactor.core.publisher.Mono;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
@@ -37,6 +42,7 @@ public class PrincipalForwardFilterTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         principalForwardFilter = new PrincipalForwardFilter(whiteListResolver);
+        when(chain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
     }
 
     @Test
@@ -46,52 +52,53 @@ public class PrincipalForwardFilterTest {
     }
 
     @Test
-    @DisplayName("测试白名单请求直接通过")
-    void testWhiteListPassThrough() {
-        // 准备请求
-        MockServerHttpRequest request = MockServerHttpRequest.get("/test").build();
+    @DisplayName("白名单请求清除伪造主体头后放行")
+    void testWhiteListStripsPrincipalHeaders() {
+        MockServerHttpRequest request = MockServerHttpRequest.get("/test")
+            .header(PrincipalHeaders.MEMBER_ID.getUpper(), "forged-member")
+            .header(PrincipalHeaders.ORGAN_ID.getUpper(), "forged-organ")
+            .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
-        // 设置白名单匹配
         when(whiteListResolver.shouldExclude(anyString(), any(ServerWebExchange.class))).thenReturn(true);
-        when(chain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
 
-        // 执行测试
-        Mono<Void> result = principalForwardFilter.filter(exchange, chain);
+        assertDoesNotThrow(() -> principalForwardFilter.filter(exchange, chain).block());
 
-        // 验证结果
-        assertDoesNotThrow(() -> result.block());
-        verify(chain).filter(exchange);
+        ArgumentCaptor<ServerWebExchange> captor = ArgumentCaptor.forClass(ServerWebExchange.class);
+        verify(chain).filter(captor.capture());
+        HttpHeaders headers = captor.getValue().getRequest().getHeaders();
+        assertNull(headers.getFirst(PrincipalHeaders.MEMBER_ID.getUpper()));
+        assertNull(headers.getFirst(PrincipalHeaders.ORGAN_ID.getUpper()));
         verify(whiteListResolver).shouldExclude("PrincipalForwardFilter", exchange);
     }
 
     @Test
-    @DisplayName("测试过滤器执行")
-    void testFilter() {
-        // 准备请求
-        MockServerHttpRequest request = MockServerHttpRequest.get("/test").build();
+    @DisplayName("伪造主体头被剥离后仅保留网关重建值")
+    void testForgedPrincipalHeadersReplacedByTrustedContext() {
+        MockServerHttpRequest request = MockServerHttpRequest.get("/test")
+            .header(PrincipalHeaders.MEMBER_ID.getUpper(), "forged-member")
+            .header(PrincipalHeaders.ORGAN_ID.getUpper(), "forged-organ")
+            .header(PrincipalHeaders.USER_ID.getUpper(), "forged-user")
+            .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
         when(whiteListResolver.shouldExclude(anyString(), any(ServerWebExchange.class))).thenReturn(false);
-        when(chain.filter(any(ServerWebExchange.class))).thenReturn(Mono.empty());
 
-        // 执行测试
-        Mono<Void> result = principalForwardFilter.filter(exchange, chain);
+        EdgePrincipalContext context = EdgePrincipalContext.of();
+        context.setSessionType(SessionType.MEMBER);
+        context.setOrganId(10001L);
+        context.setMemberId(9L);
 
-        // 验证结果（由于依赖于Reactor Context，这里主要验证不抛出异常）
-        assertDoesNotThrow(() -> result.block());
-        verify(chain).filter(any(ServerWebExchange.class));
-    }
+        assertDoesNotThrow(() -> principalForwardFilter.filter(exchange, chain)
+            .contextWrite(ctx -> EdgePrincipalContextHolder.put(ctx, context))
+            .block());
 
-    @Test
-    @DisplayName("测试处理头部信息")
-    void testProcessHeaders() {
-        // 这个方法依赖于EdgePrincipalContextHolder.get()，在测试环境中难以模拟
-        // 主要验证方法存在且不抛出异常
-        MockServerHttpRequest request = MockServerHttpRequest.get("/test").build();
-        ServerHttpRequest.Builder builder = request.mutate();
-
-        // 通过反射调用私有方法进行测试比较复杂，这里仅验证方法存在
-        assertNotNull(principalForwardFilter);
+        ArgumentCaptor<ServerWebExchange> captor = ArgumentCaptor.forClass(ServerWebExchange.class);
+        verify(chain).filter(captor.capture());
+        HttpHeaders headers = captor.getValue().getRequest().getHeaders();
+        assertEquals("9", headers.getFirst(PrincipalHeaders.MEMBER_ID.getLower()));
+        assertEquals("10001", headers.getFirst(PrincipalHeaders.ORGAN_ID.getLower()));
+        assertNull(headers.getFirst(PrincipalHeaders.USER_ID.getLower()));
+        assertEquals(1, headers.get(PrincipalHeaders.MEMBER_ID.getLower()).size());
     }
 }
