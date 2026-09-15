@@ -1,7 +1,6 @@
 package com.g2rain.gateway.filters;
 
 
-import com.g2rain.common.enums.SessionType;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.exception.SystemErrorCode;
 import com.g2rain.common.utils.Collections;
@@ -61,7 +60,7 @@ import java.util.stream.Stream;
  * </p>
  * <p>
  * 若 {@link EdgePrincipalContext#isStaticTokenAuthenticated()} 为真（已由 {@link ApiKeyFilter} 完成静态令牌鉴权），则跳过本过滤器。
- * {@link SessionType#MEMBER} 会话由服务端客服持 Bearer Token 调用，不绑定 DPoP，同样跳过。
+ * MEMBER 与其它会话同一协议，不因 {@link SessionType#MEMBER} 跳过。
  * </p>
  *
  * @author alpha
@@ -111,7 +110,7 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
         }
 
         return EdgePrincipalContextHolder.get().flatMap(context -> {
-            if (context.isStaticTokenAuthenticated() || SessionType.isMember(context.getSessionType())) {
+            if (context.isStaticTokenAuthenticated()) {
                 return chain.filter(exchange);
             }
 
@@ -282,7 +281,7 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
     private Mono<Void> buildPrincipalContext(EdgePrincipalContext context, String hashAlgorithm, DPoPJWTPayload payload) {
         List<ApplicationScope> scopes = context.getApplicationScopes();
         if (Collections.isEmpty(scopes)) {
-            return Mono.empty();
+            return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, "applicationScopes"));
         }
 
         ApplicationScope scope = scopes.stream().filter(s ->
@@ -290,7 +289,13 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
         ).findFirst().orElse(null);
 
         if (Objects.isNull(scope)) {
-            return Mono.empty();
+            return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, payload.getAcd()));
+        }
+        if (scope.getApplicationId() == null || scope.getApplicationId() <= 0L) {
+            return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, "applicationId"));
+        }
+        if (scope.getApplicationOrganId() == null || scope.getApplicationOrganId() <= 0L) {
+            return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, "applicationOrganId"));
         }
 
         // 通过 micrometer 获取 traceId

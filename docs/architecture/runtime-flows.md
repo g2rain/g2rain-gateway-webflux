@@ -16,10 +16,10 @@
 | +100 | `CachedBodyFilter` | 缓存可重复读取的请求体与响应体 |
 | +200 | `TraceLoggingFilter` | 记录请求与响应信息 |
 | +290 | `ApiKeyFilter` | 识别并校验静态 API Key |
-| +300 | `GatewayTokenAuthFilter` | 校验登录 JWT；API Key 路径跳过；MEMBER 写入 `memberId` |
-| +400 | `GatewayDPoPAuthFilter` | 校验 DPoP Proof；API Key / **MEMBER** 路径跳过 |
+| +300 | `GatewayTokenAuthFilter` | 校验登录 JWT；API Key 路径跳过；MEMBER 写入 `memberId` 并失败关闭校验 |
+| +400 | `GatewayDPoPAuthFilter` | 校验 DPoP Proof；API Key 路径跳过；MEMBER 不跳过 |
 | +500 | `ApiPermissionFilter` | 按匹配路由检查 Passport / MEMBER / User API 权限 |
-| +600 | `SignVerificationFilter` | 校验规范化 query 与 body 摘要；API Key / **MEMBER** 跳过 |
+| +600 | `SignVerificationFilter` | 校验规范化 query 与 body 摘要；API Key 路径跳过；MEMBER 不跳过 |
 | +700 | `PrincipalForwardFilter` | 移除敏感认证头并写入可信主体头（含 `X-MEMBER-ID`） |
 | +800 | `ResponseAdjustFilter` | 调整成功 JSON 响应或转化业务错误 |
 

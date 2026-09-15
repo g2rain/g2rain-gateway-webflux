@@ -1,7 +1,6 @@
 package com.g2rain.gateway.filters;
 
 
-import com.g2rain.common.enums.SessionType;
 import com.g2rain.common.exception.BusinessException;
 import com.g2rain.common.exception.SystemErrorCode;
 import com.g2rain.common.json.JsonCodecFactory;
@@ -38,7 +37,7 @@ import java.util.Objects;
  * <p>
  * 若 {@link com.g2rain.gateway.model.context.EdgePrincipalContext#isStaticTokenAuthenticated()} 为真，则跳过：
  * 静态 API Key 链路不使用 DPoP/客户端摘要体系。
- * {@link SessionType#MEMBER} 会话同样跳过（无 DPoP 摘要上下文）。
+ * MEMBER 与其它会话同一协议，不因会话类型跳过。
  * </p>
  *
  * <p>支持的算法见 {@link com.g2rain.gateway.enums.HashAlgorithm}。</p>
@@ -86,8 +85,7 @@ public class SignVerificationFilter implements GlobalFilter, Ordered {
         }
 
         return EdgePrincipalContextHolder.get().flatMap(principalContext -> {
-            if (principalContext.isStaticTokenAuthenticated()
-                || SessionType.isMember(principalContext.getSessionType())) {
+            if (principalContext.isStaticTokenAuthenticated()) {
                 return chain.filter(exchange);
             }
 

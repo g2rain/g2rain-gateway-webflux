@@ -31,12 +31,12 @@
  *         解析 {@link com.g2rain.common.web.TokenJWTPayload} 并填充上下文（含 {@code memberId}）。</li>
  *     <li>{@link com.g2rain.gateway.filters.GatewayDPoPAuthFilter}（+400）— 校验 {@code DPoP} 头中的 Proof JWT，
  *         写入签名算法与预期摘要，供 {@link com.g2rain.gateway.filters.SignVerificationFilter} 使用；
- *         {@code SessionType=MEMBER} 跳过。</li>
+ *         MEMBER 与其它会话同一协议，不因会话类型跳过。</li>
  *     <li>{@link com.g2rain.gateway.filters.ApiPermissionFilter}（+500）— 按 Spring Cloud Gateway 路由 ID
  *         校验 Passport / MEMBER / User 是否具备接口访问权限（{@link com.g2rain.gateway.cache.UserPerm}、
  *         {@link com.g2rain.gateway.cache.DefaultPerm}、{@link com.g2rain.gateway.cache.MemberPerm}）。</li>
  *     <li>{@link com.g2rain.gateway.filters.SignVerificationFilter}（+600）— 对规范化后的 query 与 body
- *         做摘要比对，验证请求未被篡改；{@code SessionType=MEMBER} 跳过。</li>
+ *         做摘要比对，验证请求未被篡改；MEMBER 与其它会话同一协议。</li>
  *     <li>{@link com.g2rain.gateway.filters.PrincipalForwardFilter}（+700）— 将 Principal 写入下游请求头
  *        （含 {@code X-MEMBER-ID}），并移除 {@code Authorization}、{@code DPoP} 等敏感头。</li>
  *     <li>{@link com.g2rain.gateway.filters.ResponseAdjustFilter}（+800）— 拦截 JSON 成功响应，
@@ -65,10 +65,10 @@
  *
  * <h2>JWT + DPoP 鉴权</h2>
  * <p>
- * 未走 API Key 分支时，{@link com.g2rain.gateway.filters.GatewayTokenAuthFilter} 校验登录 JWT，
- * {@link com.g2rain.gateway.filters.GatewayDPoPAuthFilter} 校验 DPoP 证明并补充摘要上下文，
+ * 未走 API Key 分支时，{@link com.g2rain.gateway.filters.GatewayTokenAuthFilter} 校验登录 JWT（MEMBER 含失败关闭字段校验），
+ * {@link com.g2rain.gateway.filters.GatewayDPoPAuthFilter} 校验 DPoP 证明并补充摘要与应用上下文，
  * {@link com.g2rain.gateway.filters.SignVerificationFilter} 再校验 query+body 完整性。
- * {@code SessionType=MEMBER} 仅校验 JWT（写入 {@code memberId}），跳过 DPoP 与摘要，入口权限走
+ * {@code SessionType=MEMBER} 与员工会话同一 Token 使用协议；入口权限仍走
  * {@link com.g2rain.gateway.cache.MemberPerm}（按 organ 已开通 MEMBER 控制单元），要求 {@code organId}+{@code memberId}
  * 且不得混入 {@code userId}/{@code passportId}。
  * </p>

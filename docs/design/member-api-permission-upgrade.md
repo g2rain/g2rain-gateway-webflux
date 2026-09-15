@@ -132,11 +132,11 @@ EdgePrincipalContextScopeFilter
   ↓
 GatewayTokenAuthFilter：JWT 验签并构建主体
   ↓
-GatewayDPoPAuthFilter：MEMBER 按既有约定跳过
+GatewayDPoPAuthFilter：与其它会话相同校验 DPoP（MEMBER 不跳过）
   ↓
 ApiPermissionFilter：按 organId 执行 MemberPerm 校验
   ↓
-SignVerificationFilter：MEMBER 按既有约定跳过
+SignVerificationFilter：与其它会话相同校验摘要（MEMBER 不跳过）
   ↓
 PrincipalForwardFilter：重建可信主体头
 ```

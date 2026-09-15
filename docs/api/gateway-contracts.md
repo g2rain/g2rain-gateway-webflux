@@ -27,7 +27,7 @@
 | --- | --- | --- |
 | `USER` | `X-USER-ID`、`X-ORGAN-ID`、… | DPoP + 摘要 + `UserPerm` |
 | `PASSPORT` | `X-PASSPORT-ID`、… | DPoP + 摘要 + `DefaultPerm` |
-| `MEMBER` | `X-MEMBER-ID`、`X-ORGAN-ID`、`X-SESSION-TYPE` | **跳过** DPoP/摘要；`MemberPerm(organId)`；不得写 `X-USER-ID` |
+| `MEMBER` | `X-MEMBER-ID`、`X-ORGAN-ID`、`X-SESSION-TYPE` | 与其它会话相同走 DPoP/摘要；`MemberPerm(organId)`；不得写 `X-USER-ID` |
 
 专题设计：[MEMBER 会话入口处理](../design/member-session-gateway.md)。
 
