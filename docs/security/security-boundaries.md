@@ -4,13 +4,15 @@
 
 - 静态 API Key 与 JWT/DPoP 通过凭据形态分流；错误、撤销或过期凭据必须拒绝。
 - JWT 校验、DPoP Proof、API 权限和请求摘要各自承担不同职责，不得互相替代。
+- `SessionType=MEMBER`：验签 JWT 后写入 `memberId`（`X-MEMBER-ID`），并走与其它会话相同的 DPoP/摘要；入口 API 权限按租户已开通的 MEMBER 控制单元（`MemberPerm`），要求 `organId`+`memberId` 且不得混入员工/Passport 主体；不得按 `userId` 走员工权限。专题：[MEMBER 会话入口处理](../design/member-session-gateway.md)、[MEMBER 接口权限](../design/member-api-permission-upgrade.md)。
 - 白名单按过滤器独立生效。新增或扩大匹配范围必须进行越权分析和负向测试。
 - Token 密钥由受控配置加载并支持轮换，不能提交私钥或真实 Secret。
 
 ## 主体与授权
 
-- 外部传入的主体头不可信；只能向下游发送网关验证后重建的主体上下文。
+- 外部传入的主体头不可信；`PrincipalForwardFilter` 先移除全部 `PrincipalHeaders`，再按验证后上下文以 set/replace 重建；白名单路径同样清除外部主体头，但不注入认证上下文。
 - 转发前移除 Authorization、DPoP 等敏感认证头，避免凭据继续传播。
+- `PrincipalForwardFilter` 透传含 `X-MEMBER-ID`；`userId` 与 `memberId` 分轨，MEMBER 会话不得把会员主体写入 `X-USER-ID`。
 - API 权限只决定入口 API 是否可访问。下游服务仍需验证租户、对象、状态与数据级规则。
 - 网关内存缓存是 Basis/Infra 与同步消息的副本，不是权限或身份主数据源。
 

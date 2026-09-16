@@ -37,6 +37,7 @@ import java.util.Objects;
  * <p>
  * 若 {@link com.g2rain.gateway.model.context.EdgePrincipalContext#isStaticTokenAuthenticated()} 为真，则跳过：
  * 静态 API Key 链路不使用 DPoP/客户端摘要体系。
+ * MEMBER 与其它会话同一协议，不因会话类型跳过。
  * </p>
  *
  * <p>支持的算法见 {@link com.g2rain.gateway.enums.HashAlgorithm}。</p>
