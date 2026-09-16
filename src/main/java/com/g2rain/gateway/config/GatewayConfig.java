@@ -10,8 +10,10 @@ import com.g2rain.gateway.exception.ErrorMessageStorage;
 import com.g2rain.gateway.exception.GlobalErrorHandler;
 import io.netty.channel.ConnectTimeoutException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.cloud.client.loadbalancer.reactive.WebClientCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
@@ -74,7 +76,7 @@ public class GatewayConfig implements SmartInitializingSingleton {
      */
     @Bean
     @LoadBalanced // 支持通过 Nacos 服务名调用，不依赖固定 IP
-    public WebClient.Builder webClientBuilder() {
+    public WebClient.Builder webClientBuilder(ObjectProvider<WebClientCustomizer> customizers) {
         // -----------------------------
         // 1️⃣ 连接池配置
         // -----------------------------
@@ -95,7 +97,7 @@ public class GatewayConfig implements SmartInitializingSingleton {
         // -----------------------------
         // 3️⃣ WebClient.Builder 配置
         // -----------------------------
-        return WebClient.builder()
+        WebClient.Builder builder = WebClient.builder()
             .clientConnector(new ReactorClientHttpConnector(httpClient))            // 使用自定义 HttpClient
             // 全局 filter 配置重试策略，只针对超时异常
             .filter((request, next) -> next.exchange(request)                       // 只重试超时相关异常
@@ -106,6 +108,9 @@ public class GatewayConfig implements SmartInitializingSingleton {
                     )
                 )
             );
+
+        customizers.orderedStream().forEach(c -> c.customize(builder));
+        return builder;
     }
 
     /**
