@@ -5,7 +5,9 @@ import com.g2rain.common.enums.SessionType;
 import com.g2rain.common.exception.SystemErrorCode;
 import com.g2rain.common.utils.Strings;
 import com.g2rain.gateway.cache.DefaultPerm;
+import com.g2rain.gateway.cache.MemberPerm;
 import com.g2rain.gateway.cache.UserPerm;
+import com.g2rain.gateway.config.MemberPermissionProperties;
 import com.g2rain.gateway.enums.GatewayErrorCode;
 import com.g2rain.gateway.exception.GatewayException;
 import com.g2rain.gateway.model.context.EdgePrincipalContext;
@@ -27,7 +29,8 @@ import reactor.core.publisher.Mono;
 import java.util.Objects;
 
 /**
- * 接口权限校验：基于已匹配的 {@link Route#getId()}（与 {@link ServerWebExchangeUtils#GATEWAY_ROUTE_ATTR} 一致）做 Passport / User 鉴权
+ * 接口权限校验：基于已匹配的 {@link Route#getId()}（与 {@link ServerWebExchangeUtils#GATEWAY_ROUTE_ATTR} 一致）
+ * 做 Passport / MEMBER / User 鉴权
  *
  * @author alpha
  * @since 2026/05/07
@@ -40,6 +43,10 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
     private final DefaultPerm defaultPerm;
 
     private final UserPerm userPerm;
+
+    private final MemberPerm memberPerm;
+
+    private final MemberPermissionProperties memberPermissionProperties;
 
     private final WhiteListResolver whiteListResolver;
 
@@ -83,6 +90,10 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
             });
         }
 
+        if (SessionType.isMember(context.getSessionType())) {
+            return authorizeMember(exchange, chain, context, apiId, applicationId);
+        }
+
         return userPerm.getApiPermission(context.getOrganId(), context.getUserId(), context.getRoleIds(),
                 applicationId, apiId)
             .switchIfEmpty(Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId)))
@@ -93,6 +104,57 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
 
                 return Mono.error(new GatewayException(GatewayErrorCode.SUBSCRIPTION_EXPIRED));
             });
+    }
+
+    private Mono<Void> authorizeMember(ServerWebExchange exchange, GatewayFilterChain chain,
+                                       EdgePrincipalContext context, Long apiId, Long applicationId) {
+        if (!isValidMemberPrincipal(context)) {
+            return Mono.error(new GatewayException(SystemErrorCode.UNAUTHENTICATED, "MEMBER"));
+        }
+
+        Long organId = context.getOrganId();
+        if (memberPermissionProperties.isShadow()) {
+            return defaultPerm.hasApiPermission(apiId).flatMap(defaultOk ->
+                memberPerm.hasApiPermission(organId, apiId)
+                    .onErrorResume(err -> {
+                        log.warn("MEMBER shadow MemberPerm load failed organId={} apiId={}", organId, apiId, err);
+                        return Mono.just(Boolean.FALSE);
+                    })
+                    .flatMap(memberOk -> {
+                        if (!Objects.equals(defaultOk, memberOk)) {
+                            log.warn("MEMBER permission shadow mismatch organId={} apiId={} defaultPerm={} memberPerm={}",
+                                organId, apiId, defaultOk, memberOk);
+                        }
+                        if (Boolean.TRUE.equals(defaultOk)) {
+                            return chain.filter(exchange);
+                        }
+                        return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
+                    })
+            );
+        }
+
+        return memberPerm.hasApiPermission(organId, apiId)
+            .onErrorMap(err -> {
+                if (err instanceof GatewayException) {
+                    return err;
+                }
+                return new GatewayException(GatewayErrorCode.MEMBER_PERM_UNAVAILABLE);
+            })
+            .flatMap(ok -> {
+                if (Boolean.TRUE.equals(ok)) {
+                    return chain.filter(exchange);
+                }
+                return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
+            });
+    }
+
+    private static boolean isValidMemberPrincipal(EdgePrincipalContext context) {
+        Long organId = context.getOrganId();
+        Long memberId = context.getMemberId();
+        return Objects.nonNull(organId) && organId > 0
+            && Objects.nonNull(memberId) && memberId > 0
+            && Objects.isNull(context.getUserId())
+            && Objects.isNull(context.getPassportId());
     }
 
     @Override

@@ -60,6 +60,7 @@ import java.util.stream.Stream;
  * </p>
  * <p>
  * 若 {@link EdgePrincipalContext#isStaticTokenAuthenticated()} 为真（已由 {@link ApiKeyFilter} 完成静态令牌鉴权），则跳过本过滤器。
+ * MEMBER 与其它会话同一协议，不因 {@link SessionType#MEMBER} 跳过。
  * </p>
  *
  * @author alpha
@@ -280,7 +281,7 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
     private Mono<Void> buildPrincipalContext(EdgePrincipalContext context, String hashAlgorithm, DPoPJWTPayload payload) {
         List<ApplicationScope> scopes = context.getApplicationScopes();
         if (Collections.isEmpty(scopes)) {
-            return Mono.empty();
+            return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, "applicationScopes"));
         }
 
         ApplicationScope scope = scopes.stream().filter(s ->
@@ -288,7 +289,13 @@ public class GatewayDPoPAuthFilter implements GlobalFilter, Ordered {
         ).findFirst().orElse(null);
 
         if (Objects.isNull(scope)) {
-            return Mono.empty();
+            return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, payload.getAcd()));
+        }
+        if (scope.getApplicationId() == null || scope.getApplicationId() <= 0L) {
+            return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, "applicationId"));
+        }
+        if (scope.getApplicationOrganId() == null || scope.getApplicationOrganId() <= 0L) {
+            return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, "applicationOrganId"));
         }
 
         // 通过 micrometer 获取 traceId

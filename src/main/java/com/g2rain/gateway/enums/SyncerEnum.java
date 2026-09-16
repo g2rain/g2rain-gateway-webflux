@@ -13,6 +13,10 @@ public enum SyncerEnum {
     PASSPORT_PERM,
     USER_PERM,
     /**
+     * MEMBER 会话 API 权限：载荷为 organId（Long），按机构失效本地 MemberPerm。
+     */
+    MEMBER_PERM,
+    /**
      * 个人静态访问令牌缓存失效：载荷为 {@link com.g2rain.gateway.model.cache.StaticAccessTokenHash}，见 {@link com.g2rain.gateway.cache.ApiKeyCache}。
      */
     STATIC_ACCESS_TOKEN
