@@ -150,6 +150,7 @@ public class SignVerificationFilter implements GlobalFilter, Ordered {
             byte[] hash = digest.digest(Objects.nonNull(data) ? data : Constants.EMPTY_BYTE);
             return HEX_FORMAT.formatHex(hash);
         } catch (Exception e) {
+            log.error("failed to sha256", e);
             throw new BusinessException(SystemErrorCode.PARAM_VAL_INVALID, "ph_alg");
         }
     }
