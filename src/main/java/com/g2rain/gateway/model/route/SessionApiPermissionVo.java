@@ -21,4 +21,9 @@ public class SessionApiPermissionVo {
     private Long version;
 
     private List<Long> apiIds;
+
+    /**
+     * 启用中的匿名接入码 ID；仅 ANONYMOUS 快照携带。
+     */
+    private List<Long> entryIds;
 }

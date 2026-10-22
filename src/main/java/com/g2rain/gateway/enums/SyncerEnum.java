@@ -17,6 +17,10 @@ public enum SyncerEnum {
      */
     MEMBER_PERM,
     /**
+     * ANONYMOUS 会话 API 权限与启用中的接入码：载荷为 organId（Long），按机构失效本地 AnonymousPerm。
+     */
+    ANONYMOUS_PERM,
+    /**
      * 个人静态访问令牌缓存失效：载荷为 {@link com.g2rain.gateway.model.cache.StaticAccessTokenHash}，见 {@link com.g2rain.gateway.cache.ApiKeyCache}。
      */
     STATIC_ACCESS_TOKEN
