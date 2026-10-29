@@ -27,13 +27,13 @@ public class I18nMessageVo {
     /**
      * 更新时间（出参格式：yyyy-MM-dd HH:mm:ss）
      */
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private String updateTime;
 
     /**
      * 创建时间（出参格式：yyyy-MM-dd HH:mm:ss）
      */
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private String createTime;
 
     /**
