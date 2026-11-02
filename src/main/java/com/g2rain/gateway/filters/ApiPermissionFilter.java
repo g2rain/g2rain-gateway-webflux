@@ -4,6 +4,7 @@ package com.g2rain.gateway.filters;
 import com.g2rain.common.enums.SessionType;
 import com.g2rain.common.exception.SystemErrorCode;
 import com.g2rain.common.utils.Strings;
+import com.g2rain.gateway.cache.AnonymousPerm;
 import com.g2rain.gateway.cache.DefaultPerm;
 import com.g2rain.gateway.cache.MemberPerm;
 import com.g2rain.gateway.cache.UserPerm;
@@ -45,6 +46,8 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
     private final UserPerm userPerm;
 
     private final MemberPerm memberPerm;
+
+    private final AnonymousPerm anonymousPerm;
 
     private final MemberPermissionProperties memberPermissionProperties;
 
@@ -94,6 +97,10 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
             return authorizeMember(exchange, chain, context, apiId, applicationId);
         }
 
+        if (SessionType.isAnonymous(context.getSessionType())) {
+            return authorizeAnonymous(exchange, chain, context, apiId, applicationId);
+        }
+
         return userPerm.getApiPermission(context.getOrganId(), context.getUserId(), context.getRoleIds(),
                 applicationId, apiId)
             .switchIfEmpty(Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId)))
@@ -125,7 +132,7 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
                             log.warn("MEMBER permission shadow mismatch organId={} apiId={} defaultPerm={} memberPerm={}",
                                 organId, apiId, defaultOk, memberOk);
                         }
-                        if (Boolean.TRUE.equals(defaultOk)) {
+                        if (defaultOk) {
                             return chain.filter(exchange);
                         }
                         return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
@@ -141,7 +148,24 @@ public class ApiPermissionFilter implements GlobalFilter, Ordered {
                 return new GatewayException(GatewayErrorCode.MEMBER_PERM_UNAVAILABLE);
             })
             .flatMap(ok -> {
-                if (Boolean.TRUE.equals(ok)) {
+                if (ok) {
+                    return chain.filter(exchange);
+                }
+                return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));
+            });
+    }
+
+    /**
+     * ANONYMOUS：接入码仍启用且机构已开通该接口才放行；不走员工角色链。
+     */
+    private Mono<Void> authorizeAnonymous(ServerWebExchange exchange, GatewayFilterChain chain,
+                                          EdgePrincipalContext context, Long apiId, Long applicationId) {
+        return anonymousPerm.hasApiPermission(context.getOrganId(), context.getEntryId(), apiId)
+            .onErrorMap(err -> err instanceof GatewayException
+                ? err
+                : new GatewayException(GatewayErrorCode.ANONYMOUS_PERM_UNAVAILABLE))
+            .flatMap(ok -> {
+                if (ok) {
                     return chain.filter(exchange);
                 }
                 return Mono.error(new GatewayException(SystemErrorCode.UNAUTHORIZED, applicationId));

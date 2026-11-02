@@ -31,3 +31,7 @@
 - [需求索引](requirements/README.md)
 - [项目决策](decisions/README.md)
 - [社区协作](community.md)
+
+## 发布
+
+- [v1.0.0 GHCR 镜像发布](releases/v1.0.0.md)
