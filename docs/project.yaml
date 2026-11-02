@@ -35,8 +35,8 @@ ownership:
 toolchain:
   java: "25+"
   maven: "3.9+"
-  springBoot: 4.0.5
-  springCloud: 2025.1.1
+  springBoot: 4.1.2
+  springCloud: 2025.1.4
   springCloudAlibaba: 2025.1.0.0
   packaging: executable-jar
 
@@ -94,7 +94,7 @@ commands:
     - mvn checkstyle:check
     - mvn pmd:check
     - mvn spotbugs:check
-  image: mvn clean compile jib:dockerBuild -DskipTests=true
+  image: ./build.sh <tag>
   imageScript: ./build.sh <tag>
 
 configuration:
@@ -136,7 +136,7 @@ validation:
   coverageReport: skipped-missing-execution-data
   unverified:
     - Nacos、Basis、Infra、Redis binder 与真实下游服务端到端联调
-    - Dockerfile 与 Jib 镜像构建及容器启动
+    - Dockerfile 镜像构建及容器启动
     - Checkstyle、PMD 和 SpotBugs 独立目标
 
 aiCoding:
