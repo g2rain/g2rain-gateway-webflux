@@ -11,6 +11,6 @@
 | Swagger 目录为空 | Basis 服务注册的 route prefix，以及 `/swagger-ui-config` 调用链 |
 | 错误消息缺失 | Infra 可达性和国际化错误消息加载 |
 | JaCoCo 无报告 | Surefire `argLine` 与 JaCoCo agent 参数合并方式；当前测试会跳过报告 |
-| 镜像可启动但服务不可访问 | `SERVER_PORT` 与 Dockerfile `EXPOSE 8080` 是否一致 |
+| 镜像可启动但服务不可访问 | `SERVER_PORT` 与 Dockerfile `EXPOSE 8083` 是否一致 |
 
 排查日志时不要复制 Authorization、Cookie、DPoP、API Key 或敏感正文到 Issue。
