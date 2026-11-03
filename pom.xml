@@ -93,6 +93,7 @@
         <jacoco.maven.plugin.version>0.8.15</jacoco.maven.plugin.version>
         <flatten.maven.plugin.version>1.8.0</flatten.maven.plugin.version>
         <maven.compiler.release>25</maven.compiler.release>
+        <lombok.version>1.18.48</lombok.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -284,6 +285,7 @@
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
