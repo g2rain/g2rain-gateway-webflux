@@ -45,6 +45,10 @@ docker run --rm -p 8083:8083 \
 
 CI 的 `clean verify` 是 Maven 生命周期中的构建和测试，不是 Docker 运行、匿名拉取、在线演示或外部系统部署验证。
 
+## GitHub Maven Packages 适用性
+
+本仓库的根 `pom.xml` 是唯一的 `jar` 工程，没有 Reactor `modules`，也没有 API 或 Startup 子模块。它交付可执行网关而非供其他项目依赖的 API 库，故不配置 `publish-maven.yml`、`workflow_call` 或 GitHub Maven Packages 上传。不要为发布镜像而上传根 POM 或可执行 Jar；若未来拆分出独立 API 模块，应先明确该模块的消费者、父 POM 可解析性、同仓 Reactor 范围和版本策略，再另行配置 Maven 发布工作流。
+
 ## GHCR 可见性、权限与匿名拉取
 
 首次成功推送后，维护者须在 GitHub Packages 的 **Package settings → Change visibility → Public** 将包设为公开，匿名用户才能拉取：
