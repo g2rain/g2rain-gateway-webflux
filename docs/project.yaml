@@ -94,8 +94,8 @@ commands:
     - mvn checkstyle:check
     - mvn pmd:check
     - mvn spotbugs:check
-  image: ./build.sh <tag>
-  imageScript: ./build.sh <tag>
+  image: ./build.sh [version]
+  imageScript: ./build.sh [version]
 
 configuration:
   file: src/main/resources/application.yml
