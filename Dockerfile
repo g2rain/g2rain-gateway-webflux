@@ -14,4 +14,4 @@ ENV APP_VERSION=${BUILD_VERSION}
 WORKDIR /app
 COPY ${JAR_FILE} /app/app.jar
 EXPOSE 8083
-ENTRYPOINT ["java", "-jar", "/app.jar"]
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
