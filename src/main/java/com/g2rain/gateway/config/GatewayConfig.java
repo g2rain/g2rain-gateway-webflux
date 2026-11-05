@@ -99,6 +99,7 @@ public class GatewayConfig implements SmartInitializingSingleton {
         // -----------------------------
         WebClient.Builder builder = WebClient.builder()
             .clientConnector(new ReactorClientHttpConnector(httpClient))            // 使用自定义 HttpClient
+            .codecs(c -> c.defaultCodecs().maxInMemorySize(5 * 1024 * 1024))        // 设置响应体内存 5MB 缓冲
             // 全局 filter 配置重试策略，只针对超时异常
             .filter((request, next) -> next.exchange(request)                       // 只重试超时相关异常
                 .retryWhen(Retry.backoff(2, Duration.ofMillis(500))                 // 最多重试 2 次，每次间隔 500ms
