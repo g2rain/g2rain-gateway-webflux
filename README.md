@@ -201,6 +201,7 @@ flowchart TD
 - 仅在推送已进入 `main` 的稳定 Git tag（`vMAJOR.MINOR.PATCH`）时发布；工作流同时校验 Maven 项目版本及 `docs/releases/v<版本>.md`。
 - 成功时推送 `<版本>` 与 `sha-<完整提交 SHA>` 两个标签；不发布 `latest`。
 - 拉取示例：`docker pull ghcr.io/g2rain/g2rain-gateway-webflux:1.0.0`。匿名拉取须在首次成功推送后将包设为 Public；完整的权限、构建、运行与发布说明见[部署文档](docs/operations/deployment.md)。
+- 本仓库是单模块可执行网关，不含可独立消费的 API 模块；因此不发布 GitHub Maven Packages，也不提供 `publish-maven.yml`。
 
 ## 代码质量与测试
 
